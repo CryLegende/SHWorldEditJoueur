@@ -7,13 +7,11 @@ import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.WorldEditException;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
-import com.sk89q.worldedit.function.mask.BlockMask;
-import com.sk89q.worldedit.function.mask.Mask;
+import com.sk89q.worldedit.function.mask.BlockTypeMask;
 import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.world.World;
-import com.sk89q.worldedit.world.block.BaseBlock;
 import com.sk89q.worldedit.world.block.BlockState;
 import com.sk89q.worldedit.world.block.BlockType;
 import com.sk89q.worldedit.world.block.BlockTypes;
@@ -108,20 +106,31 @@ public class WorldEditManager {
     }
 
     public void executePlace(Player player, Region region, ItemStack chosenItem, Island island) {
-        Group group = plugin.getConfigManager().getPlayerGroup(player);
-        World world = BukkitAdapter.adapt(player.getWorld());
-        BlockState blockToPlace = BukkitAdapter.adapt(chosenItem.getType().createBlockData());
+        // L'item cliqué est l'objet vivant de l'inventaire : on travaille sur une copie autonome
+        ItemStack template = chosenItem.clone();
+        template.setAmount(1);
 
-        if (plugin.getConfigManager().isBlockBanned("place", chosenItem.getType())) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("banned-block-place")
-                .replace("%type%", prettyName(chosenItem.getType())));
+        // L'état du joueur a pu changer pendant le délai de confirmation (île quittée, droits retirés...)
+        if (!isActionStillValid(player, region, island)) {
             return;
         }
 
-        int playerBlockCount = countItems(player, chosenItem.getType(), chosenItem.getDurability());
+        Group group = plugin.getConfigManager().getPlayerGroup(player);
+        World world = worldOf(player, region);
+        BlockState blockToPlace = BukkitAdapter.adapt(template.getType().createBlockData());
+
+        if (plugin.getConfigManager().isBlockBanned("place", template.getType())) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("banned-block-place")
+                .replace("%type%", prettyName(template.getType())));
+            return;
+        }
+
+        // Même critère de comparaison que pour le retrait : sinon des items différents du même matériau
+        // (nommés, avec lore...) seraient comptés mais jamais retirés, et les blocs seraient posés gratuitement.
+        int playerBlockCount = countItems(player, template);
         if (playerBlockCount == 0) {
             Common.sendMessage(player, plugin.getConfigManager().getMessage("no-blocks")
-                .replace("%type%", prettyName(chosenItem.getType())));
+                .replace("%type%", prettyName(template.getType())));
             return;
         }
 
@@ -149,7 +158,19 @@ public class WorldEditManager {
             Common.sendMessage(player, plugin.getConfigManager().getMessage("no-money-transaction-failed"));
             return;
         }
-        removeItems(player, chosenItem, budget);
+        int removed = removeItems(player, template, budget);
+        if (removed < budget) {
+            // L'inventaire a changé entre le comptage et le retrait : on ne pose que ce qui a réellement été retiré
+            double unusedReservation = (budget - removed) * group.getPlacePrice();
+            plugin.getVaultHook().depositPlayer(player, unusedReservation);
+            reservedCost -= unusedReservation;
+            budget = removed;
+            if (budget <= 0) {
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("no-blocks")
+                    .replace("%type%", prettyName(template.getType())));
+                return;
+            }
+        }
 
         // Une seule passe sur la région : lecture de l'état, écriture directe dans
         // l'EditSession (FAWE regroupe les écritures par chunk), arrêt dès que le
@@ -170,7 +191,7 @@ public class WorldEditManager {
             }
             Operations.complete(session.commit());
         } catch (WorldEditException e) {
-            refund(player, chosenItem, budget, reservedCost);
+            refund(player, template, budget, reservedCost);
             player.sendMessage(ChatColor.RED + "Une erreur WorldEdit est survenue, vos items et votre argent vous ont été rendus : " + e.getMessage());
             plugin.getLogger().log(Level.SEVERE, "Erreur WorldEdit pendant /place pour " + player.getName(), e);
             return;
@@ -179,7 +200,7 @@ public class WorldEditManager {
         // Rembourse la part réservée mais non consommée.
         int unused = budget - affected;
         if (unused > 0) {
-            refund(player, chosenItem, unused, unused * group.getPlacePrice());
+            refund(player, template, unused, unused * group.getPlacePrice());
         }
 
         if (affected == 0) {
@@ -194,7 +215,7 @@ public class WorldEditManager {
                 .replace("%max%", String.valueOf(maxAllowedByPerm)));
         }
 
-        Key blockKey = SuperiorSkyblockAPI.getKeys().getKey(chosenItem);
+        Key blockKey = SuperiorSkyblockAPI.getKeys().getKey(template);
         if (blockKey != null) {
             island.handleBlockPlace(blockKey, affected, true);
         }
@@ -202,53 +223,73 @@ public class WorldEditManager {
         double chargedCost = affected * group.getPlacePrice();
         Common.sendMessage(player, plugin.getConfigManager().getMessage("placed-success")
             .replace("%amount%", String.valueOf(affected))
-            .replace("%type%", prettyName(chosenItem.getType()))
+            .replace("%type%", prettyName(template.getType()))
             .replace("%price%", plugin.getVaultHook().format(chargedCost)));
         player.playSound(player.getLocation(), plugin.getConfigManager().getBuildSound(), 1.0f, 1.0f);
 
-        plugin.getLogManager().logPlace(player, affected, chosenItem.getType(), chargedCost);
+        plugin.getLogManager().logPlace(player, affected, template.getType(), chargedCost);
     }
 
     public void executeCut(Player player, Region region, Island island) {
         try {
-            Group group = plugin.getConfigManager().getPlayerGroup(player);
-            World world = BukkitAdapter.adapt(player.getWorld());
+            // L'état du joueur a pu changer pendant le délai de confirmation (île quittée, droits retirés...)
+            if (!isActionStillValid(player, region, island)) {
+                return;
+            }
 
-            int blocksToCutCount = 0;
-            Map<ItemStack, Integer> collectedItems = new HashMap<>();
-            Map<Key, Integer> blocksToRemoveFromIsland = new HashMap<>();
+            Group group = plugin.getConfigManager().getPlayerGroup(player);
+            World world = worldOf(player, region);
 
             // Lecture directe de la région. L'ancienne version recopiait d'abord
             // toute la sélection dans un BlockArrayClipboard via ForwardExtentCopy
             // (une passe complète et une allocation dimensionnée sur le volume de la
             // région) avant de la relire bloc par bloc.
+            // On ne fait que compter par matériau pendant le parcours : drops et clés SSB2 se calculent ensuite une fois par matériau.
+            Map<Material, Integer> cutCounts = new EnumMap<>(Material.class);
             try (EditSession readSession = WorldEdit.getInstance().newEditSession(world)) {
                 for (BlockVector3 pt : region) {
                     try {
-                        BlockState block = readSession.getBlock(pt);
-                        BlockType blockType = block.getBlockType();
+                        BlockType blockType = readSession.getBlock(pt).getBlockType();
                         if (blockType.getMaterial().isAir()) continue;
 
                         Material material = toMaterial(blockType);
                         if (material == null) continue;
                         if (plugin.getConfigManager().isBlockBanned("cut", material)) continue;
 
-                        blocksToCutCount++;
-                        ItemStack drop = getDropFromBlock(material);
-                        if (drop != null) collectedItems.merge(drop, 1, Integer::sum);
-
-                        Key blockKey = SuperiorSkyblockAPI.getKeys().getKey(material, (short) 0);
-                        if (blockKey != null) {
-                            blocksToRemoveFromIsland.merge(blockKey, 1, Integer::sum);
-                        }
+                        cutCounts.merge(material, 1, Integer::sum);
                     } catch (Exception loopException) {
                         plugin.getLogger().log(Level.SEVERE, "Erreur dans la boucle d'analyse du bloc à " + pt, loopException);
                     }
                 }
             }
 
+            int blocksToCutCount = 0;
+            Map<ItemStack, Integer> collectedItems = new HashMap<>();
+            Map<Key, Integer> blocksToRemoveFromIsland = new HashMap<>();
+            for (Map.Entry<Material, Integer> cut : cutCounts.entrySet()) {
+                Material material = cut.getKey();
+                int amount = cut.getValue();
+                blocksToCutCount += amount;
+
+                ItemStack drop = getDropFromBlock(material);
+                if (drop != null) collectedItems.merge(drop, amount, Integer::sum);
+
+                Key blockKey = SuperiorSkyblockAPI.getKeys().getKey(material, (short) 0);
+                if (blockKey != null) {
+                    blocksToRemoveFromIsland.merge(blockKey, amount, Integer::sum);
+                }
+            }
+
             if (blocksToCutCount == 0) {
                 Common.sendMessage(player, plugin.getConfigManager().getMessage("no-cuttable-blocks-in-selection"));
+                return;
+            }
+
+            // La limite du groupe a été contrôlée à la saisie de la commande ; le contenu a pu grossir depuis
+            if (blocksToCutCount > group.getMaxBlocks()) {
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("selection-too-large")
+                    .replace("%max%", String.valueOf(group.getMaxBlocks()))
+                    .replace("%size%", String.valueOf(blocksToCutCount)));
                 return;
             }
 
@@ -265,15 +306,17 @@ public class WorldEditManager {
             }
 
             try (EditSession writeSession = WorldEdit.getInstance().newEditSession(world)) {
-                Set<BaseBlock> bannedBaseBlocks = plugin.getConfigManager().getBannedCutMaterials().stream()
-                    .filter(Material::isBlock)
-                    .map(material -> BukkitAdapter.adapt(material.createBlockData()).toBaseBlock())
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
+                // Par type de bloc (tous les états) : un masque sur l'état par défaut laissait détruire un coffre
+                // ou une trémie orienté autrement, avec son contenu.
+                Set<BlockType> bannedTypes = new HashSet<>();
+                for (Material banned : plugin.getConfigManager().getBannedCutMaterials()) {
+                    if (!banned.isBlock()) continue;
+                    BlockType bannedType = BukkitAdapter.asBlockType(banned);
+                    if (bannedType != null) bannedTypes.add(bannedType);
+                }
 
-                if (!bannedBaseBlocks.isEmpty()) {
-                    Mask bannedMask = new BlockMask(writeSession, bannedBaseBlocks);
-                    writeSession.setMask(bannedMask.inverse());
+                if (!bannedTypes.isEmpty()) {
+                    writeSession.setMask(new BlockTypeMask(writeSession, bannedTypes).inverse());
                 }
 
                 writeSession.setBlocks(region, BlockTypes.AIR.getDefaultState());
@@ -308,8 +351,7 @@ public class WorldEditManager {
             if (region != null) {
                 plugin.getLogger().log(Level.SEVERE, "Région: " + region.getVolume() + " blocs de " + region.getMinimumPoint() + " à " + region.getMaximumPoint());
             }
-            plugin.getLogger().log(Level.SEVERE, "Merci de rapporter l'erreur suivante à votre développeur:");
-            e.printStackTrace();
+            plugin.getLogger().log(Level.SEVERE, "Merci de rapporter l'erreur suivante à votre développeur:", e);
             plugin.getLogger().log(Level.SEVERE, "======================================================");
             player.sendMessage(ChatColor.RED + "Une erreur interne est survenue. Veuillez contacter un administrateur.");
         }
@@ -334,7 +376,8 @@ public class WorldEditManager {
         int remaining = amount;
         while (remaining > 0) {
             int give = Math.min(remaining, maxStackSize);
-            ItemStack stack = new ItemStack(template.getType(), give, template.getDurability());
+            ItemStack stack = template.clone(); // conserve le nom, le lore et les données de l'item d'origine
+            stack.setAmount(give);
             HashMap<Integer, ItemStack> leftovers = player.getInventory().addItem(stack);
             for (ItemStack leftover : leftovers.values()) {
                 player.getWorld().dropItemNaturally(player.getLocation(), leftover);
@@ -347,18 +390,23 @@ public class WorldEditManager {
         return material.toString().toLowerCase(Locale.ROOT).replace("_", " ");
     }
 
-    private int countItems(Player player, Material material, short data) {
+    private int countItems(Player player, ItemStack template) {
         int count = 0;
         for (ItemStack item : player.getInventory().getStorageContents()) {
-            if (item != null && item.getType() == material && item.getDurability() == data) {
+            if (item != null && item.isSimilar(template)) {
                 count += item.getAmount();
             }
         }
         return count;
     }
 
-    private void removeItems(Player player, ItemStack itemToRemove, int amount) {
-        if (amount <= 0) return;
+    /**
+     * Retire jusqu'à {@code amount} items identiques à {@code itemToRemove}.
+     *
+     * @return le nombre d'items réellement retirés
+     */
+    private int removeItems(Player player, ItemStack itemToRemove, int amount) {
+        if (amount <= 0) return 0;
         int remaining = amount;
 
         ItemStack[] contents = player.getInventory().getStorageContents();
@@ -380,12 +428,44 @@ public class WorldEditManager {
             }
         }
         player.updateInventory();
+        return amount - remaining;
+    }
+
+    /**
+     * Monde de la sélection (et non celui du joueur à l'instant de la confirmation).
+     */
+    private World worldOf(Player player, Region region) {
+        World regionWorld = region.getWorld();
+        return regionWorld != null ? regionWorld : BukkitAdapter.adapt(player.getWorld());
+    }
+
+    /**
+     * Revérifie, au moment de la confirmation, ce qui n'était contrôlé qu'à la saisie de la commande.
+     */
+    private boolean isActionStillValid(Player player, Region region, Island island) {
+        Island current = plugin.getSsbHook().getIsland(player);
+        if (current == null || !current.getUniqueId().equals(island.getUniqueId())) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-island"));
+            return false;
+        }
+        if (!plugin.getSsbHook().isSelectionOnIsland(region, island)) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("outside-island"));
+            return false;
+        }
+        if (!plugin.getSsbHook().hasPermission(player, island)) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-island-perm"));
+            return false;
+        }
+        return true;
     }
 
     private ItemStack getDropFromBlock(Material material) {
         ItemStack customDrop = plugin.getConfigManager().getCustomDrop(material);
         if (customDrop != null) {
             return customDrop.getType() == Material.AIR ? null : customDrop.clone();
+        }
+        if (!material.isItem()) {
+            return null; // Eau, lave, torche murale... : pas d'item correspondant, rien à donner
         }
         return new ItemStack(material, 1);
     }

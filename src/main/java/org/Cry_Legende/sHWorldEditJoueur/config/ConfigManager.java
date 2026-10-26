@@ -3,6 +3,8 @@ package org.Cry_Legende.sHWorldEditJoueur.config;
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -26,11 +28,12 @@ public class ConfigManager {
     private String confirmWord;
     private long cancelTime;
     private Map<Material, ItemStack> replaceGiveMap = new HashMap<>();
-    private List<Material> bannedPlace = new ArrayList<>();
-    private List<Material> bannedCut = new ArrayList<>();
+    // Ensembles : isBlockBanned() est appelé pour chaque bloc d'une sélection
+    private Set<Material> bannedPlace = EnumSet.noneOf(Material.class);
+    private Set<Material> bannedCut = EnumSet.noneOf(Material.class);
 
     // Messages
-    private String prefix;
+    private String prefix = "";
     private Map<String, String> messages = new HashMap<>();
 
     // Groups
@@ -62,10 +65,9 @@ public class ConfigManager {
             settings = plugin.getConfig().createSection("settings");
         }
 
-        try {
-            buildSound = Sound.valueOf(settings.getString("build-sound", "BLOCK_STONE_PLACE").toUpperCase());
-            cutSound = Sound.valueOf(settings.getString("cut-sound", "BLOCK_STONE_BREAK").toUpperCase());
-        } catch (IllegalArgumentException e) {
+        buildSound = sound(settings.getString("build-sound", "BLOCK_STONE_PLACE"));
+        cutSound = sound(settings.getString("cut-sound", "BLOCK_STONE_BREAK"));
+        if (buildSound == null || cutSound == null) {
             plugin.getLogger().warning("Un son invalide a été spécifié dans config.yml. Utilisation des valeurs par défaut.");
             buildSound = Sound.BLOCK_STONE_PLACE;
             cutSound = Sound.BLOCK_STONE_BREAK;
@@ -78,11 +80,11 @@ public class ConfigManager {
         bannedPlace = settings.getStringList("banned-blocks.place").stream()
             .map(s -> Material.matchMaterial(s.trim().toUpperCase()))
             .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+            .collect(Collectors.toCollection(() -> EnumSet.noneOf(Material.class)));
         bannedCut = settings.getStringList("banned-blocks.cut").stream()
             .map(s -> Material.matchMaterial(s.trim().toUpperCase()))
             .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+            .collect(Collectors.toCollection(() -> EnumSet.noneOf(Material.class)));
 
         replaceGiveMap.clear();
         List<String> replaceGiveList = settings.getStringList("replace-give");
@@ -107,6 +109,23 @@ public class ConfigManager {
             } catch (Exception e) {
                 plugin.getLogger().warning("Erreur de parsing pour l'entrée 'replace-give': " + entry);
             }
+        }
+    }
+
+    /**
+     * Son lu en config : ancien nom (ENTITY_PLAYER_LEVELUP) ou clé (minecraft:entity.player.levelup).
+     */
+    private static Sound sound(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String s = raw.trim();
+        if (s.indexOf(':') >= 0 || s.indexOf('.') >= 0) {
+            NamespacedKey key = NamespacedKey.fromString(s.toLowerCase(Locale.ROOT));
+            return key == null ? null : Registry.SOUND_EVENT.get(key);
+        }
+        try {
+            return (Sound) Sound.class.getField(s.toUpperCase(Locale.ROOT)).get(null);
+        } catch (ReflectiveOperationException | ClassCastException e) {
+            return null;
         }
     }
 
@@ -248,7 +267,7 @@ public class ConfigManager {
         return cancelTime;
     }
 
-    public List<Material> getBannedCutMaterials() {
-        return bannedCut;
+    public Set<Material> getBannedCutMaterials() {
+        return Collections.unmodifiableSet(bannedCut);
     }
 }

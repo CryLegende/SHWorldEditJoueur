@@ -51,8 +51,8 @@ public class SuperiorSkyblockHook {
         BlockVector3 minVec = selection.getMinimumPoint();
         BlockVector3 maxVec = selection.getMaximumPoint();
 
-        Location minLoc = new Location(bukkitWorld, minVec.getX(), minVec.getY(), minVec.getZ());
-        Location maxLoc = new Location(bukkitWorld, maxVec.getX(), maxVec.getY(), maxVec.getZ());
+        Location minLoc = new Location(bukkitWorld, minVec.x(), minVec.y(), minVec.z());
+        Location maxLoc = new Location(bukkitWorld, maxVec.x(), maxVec.y(), maxVec.z());
 
         return island.isInsideRange(minLoc) && island.isInsideRange(maxLoc);
     }

@@ -35,7 +35,9 @@ public class ActionData {
      */
     public ActionData(Player player, Region region, ActionType type, Island island) {
         this.player = player;
-        this.region = region;
+        // Copie de la sélection : l'objet de WorldEdit est modifié en place quand le joueur reclique avec la hache
+        // pendant le délai de confirmation, ce qui permettrait de viser une zone hors de l'île.
+        this.region = region != null ? region.clone() : null;
         this.type = type;
         this.island = island;
     }

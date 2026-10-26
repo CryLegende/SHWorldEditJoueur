@@ -84,6 +84,24 @@ public class CutCommand implements CommandExecutor, TabCompleter {
 
         Group group = plugin.getConfigManager().getPlayerGroup(player);
 
+        // Contrôles d'île avant le comptage : le parcours de la sélection se fait sur le thread principal,
+        // il doit rester borné à la taille d'une île.
+        Island island = plugin.getSsbHook().getIsland(player);
+        if (island == null) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-island"));
+            return true;
+        }
+
+        if (!plugin.getSsbHook().isSelectionOnIsland(selection, island)) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("outside-island"));
+            return true;
+        }
+
+        if (!plugin.getSsbHook().hasPermission(player, island)) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-island-perm"));
+            return true;
+        }
+
         // CORRECTION : On compte les blocs réels (non-air) avant de vérifier la limite.
         int nonAirBlocks;
         try (EditSession countSession = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(player.getWorld()))) {
@@ -99,22 +117,6 @@ public class CutCommand implements CommandExecutor, TabCompleter {
             Common.sendMessage(player, plugin.getConfigManager().getMessage("selection-too-large")
                 .replace("%max%", String.valueOf(group.getMaxBlocks()))
                 .replace("%size%", String.valueOf(nonAirBlocks))); // On utilise le nombre de blocs réels
-            return true;
-        }
-
-        Island island = plugin.getSsbHook().getIsland(player);
-        if (island == null) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-island"));
-            return true;
-        }
-
-        if (!plugin.getSsbHook().isSelectionOnIsland(selection, island)) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("outside-island"));
-            return true;
-        }
-
-        if (!plugin.getSsbHook().hasPermission(player, island)) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-island-perm"));
             return true;
         }
 

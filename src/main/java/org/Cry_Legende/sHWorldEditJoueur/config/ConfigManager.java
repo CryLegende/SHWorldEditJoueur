@@ -7,14 +7,20 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Gère le chargement, l'analyse et l'accès à toutes les valeurs du fichier config.yml.
+ * Gère le chargement, l'analyse et l'accès aux valeurs de config.yml et aux textes de messages.yml.
  * Centralise la configuration pour faciliter la maintenance et l'accès aux données.
  */
 public class ConfigManager {
@@ -130,24 +136,35 @@ public class ConfigManager {
     }
 
     /**
-     * Charge la section 'messages' du config.yml.
+     * Charge messages.yml. Une clé absente reprend le texte livré avec le plugin.
      */
     private void loadMessages() {
-        ConfigurationSection msgSection = plugin.getConfig().getConfigurationSection("messages");
-        if (msgSection == null) {
-            plugin.getLogger().severe("La section 'messages' est manquante dans config.yml !");
-            return;
+        File file = new File(plugin.getDataFolder(), "messages.yml");
+        if (!file.exists()) {
+            plugin.saveResource("messages.yml", false);
+        }
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        try (InputStream in = plugin.getResource("messages.yml")) {
+            if (in != null) {
+                yaml.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8)));
+            }
+        } catch (IOException e) {
+            plugin.getLogger().warning("Lecture des messages livrés avec le plugin impossible : " + e.getMessage());
         }
 
-        prefix = msgSection.getString("prefix", "&7&l« &c&lSH &8&l» &r");
+        prefix = yaml.getString("prefix", "");
         messages.clear();
-        for (String key : msgSection.getKeys(false)) {
+        Set<String> keys = new LinkedHashSet<>(yaml.getKeys(false));
+        if (yaml.getDefaults() != null) {
+            keys.addAll(yaml.getDefaults().getKeys(false));
+        }
+        for (String key : keys) {
             if (key.equals("prefix")) continue;
 
-            if (msgSection.isList(key)) {
-                messages.put(key, String.join("\n", msgSection.getStringList(key)));
+            if (yaml.isList(key)) {
+                messages.put(key, String.join("\n", yaml.getStringList(key)));
             } else {
-                messages.put(key, msgSection.getString(key));
+                messages.put(key, yaml.getString(key));
             }
         }
     }
@@ -221,7 +238,7 @@ public class ConfigManager {
      * Récupère un message formaté depuis la configuration.
      */
     public String getMessage(String key) {
-        String message = messages.getOrDefault(key, "&cMessage manquant dans config.yml: '" + key + "'");
+        String message = messages.getOrDefault(key, "&cMessage manquant dans messages.yml: '" + key + "'");
         String coloredMessage = ChatColor.translateAlternateColorCodes('&', message);
         return ChatColor.translateAlternateColorCodes('&', prefix + coloredMessage);
     }

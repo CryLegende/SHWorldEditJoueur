@@ -18,7 +18,6 @@ import com.sk89q.worldedit.world.block.BlockTypes;
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
 import org.Cry_Legende.sHWorldEditJoueur.config.Group;
 import org.Cry_Legende.sHWorldEditJoueur.utils.Common;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -192,7 +191,8 @@ public class WorldEditManager {
             Operations.complete(session.commit());
         } catch (WorldEditException e) {
             refund(player, template, budget, reservedCost);
-            player.sendMessage(ChatColor.RED + "Une erreur WorldEdit est survenue, vos items et votre argent vous ont été rendus : " + e.getMessage());
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("worldedit-error")
+                .replace("%error%", String.valueOf(e.getMessage())));
             plugin.getLogger().log(Level.SEVERE, "Erreur WorldEdit pendant /place pour " + player.getName(), e);
             return;
         }
@@ -353,7 +353,7 @@ public class WorldEditManager {
             }
             plugin.getLogger().log(Level.SEVERE, "Merci de rapporter l'erreur suivante à votre développeur:", e);
             plugin.getLogger().log(Level.SEVERE, "======================================================");
-            player.sendMessage(ChatColor.RED + "Une erreur interne est survenue. Veuillez contacter un administrateur.");
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("internal-error"));
         }
     }
 

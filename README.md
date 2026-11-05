@@ -20,7 +20,7 @@ Utilisé sur : **Opale**.
 
 ## Dépendances
 
-- Optionnelles : `SuperiorSkyblock2`, `FastAsyncWorldEdit`, `Vault`
+- Optionnelles : `SuperiorSkyblock2`, `FastAsyncWorldEdit`, `Vault`, `SHLogs`
 
 ## Commandes
 
@@ -45,8 +45,11 @@ Fichiers par défaut repris du serveur (secrets remplacés par `CHANGE_ME`). Cli
 
 <pre>
 plugins/SHWorldEditJoueur/
-└── <a href="src/main/resources/config.yml">config.yml</a>
+├── <a href="src/main/resources/config.yml">config.yml</a>
+└── <a href="src/main/resources/messages.yml">messages.yml</a>
 </pre>
+
+Les `/place` et `/cut` effectués sont écrits dans le fichier `actions` du dossier `SHWorldEditJoueur` de SHLogs (`plugins/SHLogs/`). Sans SHLogs, les lignes passent dans la console.
 
 ## Compilation
 

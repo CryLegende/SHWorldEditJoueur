@@ -1,0 +1,105 @@
+# ----------------------------------------------------------------#
+#                 Messages de SHWorldEditJoueur                   #
+# ----------------------------------------------------------------#
+#
+# Couleurs : codes & classiques.
+# Les messages de chat portent leur préfixe typé :
+#   &7&l« &<couleur>&lSH &8&l» &7texte en gris et &<couleur>mots clés
+#   &a succès, &e information, &6avertissement, &c erreur.
+# Une liste donne un texte de plusieurs lignes, une ligne par élément.
+# Placeholders : indiqués avant chaque message, écrits %comme-ceci%.
+# Ce fichier est lu au démarrage du serveur. Une clé absente reprend le texte livré avec le plugin.
+
+# Texte ajouté devant chaque message (vide : les messages portent déjà leur préfixe).
+prefix: ""
+
+# Le joueur n'a pas la permission shwe.use.
+no-perm: "&7&l« &c&lSH &8&l» &cVous n'avez pas la permission de faire ça."
+
+# La commande est lancée depuis la console.
+player-only: "&7&l« &c&lSH &8&l» &cCette commande ne peut être exécutée que par un joueur."
+
+# Le joueur n'a pas de sélection WorldEdit.
+make-selection: "&7&l« &c&lSH &8&l» &cVous devez d'abord faire une sélection avec la hache de WorldEdit."
+
+# Le joueur n'est pas sur son île.
+no-island: "&7&l« &c&lSH &8&l» &cVous devez être sur votre île pour utiliser cette commande."
+
+# La sélection sort des limites de l'île.
+outside-island: "&7&l« &c&lSH &8&l» &cVotre sélection sort des limites de votre île."
+
+# Le rôle du joueur n'a pas le privilège d'île SHWORLDEDIT_USE.
+no-island-perm: "&7&l« &c&lSH &8&l» &cLe chef de votre île n'a pas autorisé votre rôle à utiliser cette fonction. (/is permissions)"
+
+# Réponse à /place. Placeholders : %amount% blocs plaçables, %price% prix d'un bloc, %time% secondes avant l'expiration.
+confirm-place:
+  - "&r"
+  - "&7&l« &e&lSH &8&l» &fCliquez dans votre inventaire sur le bloc que vous souhaitez placer."
+  - "&7&l« &e&lSH &8&l» &7Sélection: &e%amount% blocs &8| &7Coût: &e%price% SHCoins &7par bloc"
+  - "&7&l« &e&lSH &8&l» &7Tapez &6/place cancel &7pour annuler. (Expire dans &e%time%s&7)"
+  - "&r"
+
+# Réponse à /cut. Placeholders : %amount% blocs à couper, %price% prix d'un bloc, %total_price% prix total, %time% secondes avant l'expiration.
+confirm-cut:
+  - "&r"
+  - "&7&l« &e&lSH &8&l» &fUtilisez la commande &6/cut confirm &fpour confirmer."
+  - "&7&l« &e&lSH &8&l» &7Sélection: &e%amount% blocs &8| &7Coût: &e%price% SHCoins &7par bloc"
+  - "&7&o(Sauf exception, vous récupérerez dans votre inventaire les blocs coupés.)"
+  - "&r"
+
+# Fin de /cut. Placeholders : %amount% blocs coupés, %price% prix total.
+cut-success: "&7&l« &a&lSH &8&l» &7Vous avez récupéré &a%amount% blocs &7de votre sélection pour &a%price% SHC&7."
+
+# Fin de /place. Placeholders : %amount% blocs posés, %type% type de bloc, %price% prix total.
+placed-success: "&7&l« &a&lSH &8&l» &7Vous avez placé &a%amount% blocs de %type% &7pour &a%price% SHC&7."
+
+# Placeholders : %placed_amount% blocs posés, %type% type de bloc.
+placed-partial: "&7&l« &e&lSH &8&l» &eVous n'aviez que &6%placed_amount% %type%&e, l'opération s'est arrêtée."
+
+# Le joueur n'a pas assez d'argent. Placeholders : %missing% somme manquante.
+no-money: "&7&l« &c&lSH &8&l» &7Vous n'avez pas assez d'argent pour faire cela. Il vous manque &c%missing% SHCoins&7."
+
+# Le joueur n'a pas le bloc choisi dans son inventaire. Placeholders : %type% type de bloc.
+no-blocks: "&7&l« &c&lSH &8&l» &7Vous n'avez aucun bloc du type &c%type% &7dans votre inventaire."
+
+# L'objet cliqué pendant /place n'est pas un bloc.
+invalid-block: "&7&l« &c&lSH &8&l» &cCet objet ne peut pas être placé."
+
+# Le bloc est interdit à la pose. Placeholders : %type% type de bloc.
+banned-block-place: "&7&l« &c&lSH &8&l» &7Le bloc &c%type% &7ne peut pas être placé."
+
+# Le bloc est interdit à la coupe. Placeholders : %type% type de bloc.
+banned-block-cut: "&7&l« &c&lSH &8&l» &7Le bloc &c%type% &cne peut pas être coupé."
+
+# La sélection n'a aucun emplacement libre (air, eau...).
+no-placeable-blocks-in-selection: "&7&l« &c&lSH &8&l» &7Votre sélection ne contient aucun bloc où placer des blocs (air, eau, etc.)."
+
+# La sélection n'a aucun bloc à couper.
+no-cuttable-blocks-in-selection: "&7&l« &c&lSH &8&l» &7Votre sélection ne contient aucun bloc à couper."
+
+# La sélection dépasse la limite du groupe. Placeholders : %max% limite du groupe, %size% blocs sélectionnés.
+selection-too-large: "&7&l« &c&lSH &8&l» &7Vous avez sélectionné une zone trop large."
+
+# L'action en attente est annulée (commande d'annulation ou expiration).
+action-cancelled: "&7&l« &c&lSH &8&l» &7Action annulée."
+
+# Annulation demandée sans action en attente.
+no-action: "&7&l« &c&lSH &8&l» &cVous n'avez aucune action en cours."
+
+# L'inventaire est plein : les objets restants tombent au sol.
+inventory-full: "&7&l« &c&lSH &8&l» &cVotre inventaire est plein ! Les blocs restants sont tombés au sol."
+
+# La limite du groupe a borné la pose. Placeholders : %max% limite du groupe.
+limit-exceeded: "&7&l« &e&lSH &8&l» &eVotre sélection dépasse votre limite, l'opération a été limitée à &6%max% blocs&e."
+
+# Erreur de WorldEdit pendant le comptage des blocs de /cut. Placeholders : %error% détail de l'erreur.
+count-error: "&7&l« &c&lSH &8&l» &7Erreur lors du comptage des blocs : &c%error%&7."
+
+# Erreur de WorldEdit pendant /place : les objets et l'argent sont rendus. Placeholders : %error% détail de l'erreur.
+worldedit-error: "&7&l« &c&lSH &8&l» &7Une erreur WorldEdit est survenue, vos &eobjets &7et votre &eargent &7vous ont été rendus : &c%error%&7."
+
+# Erreur interne pendant /cut.
+internal-error: "&7&l« &c&lSH &8&l» &7Une erreur interne est survenue. Veuillez contacter un &cadministrateur&7."
+
+# Le retrait de l'argent a échoué pendant /place ou /cut.
+no-money-transaction-failed: "&7&l« &c&lSH &8&l» &7La &ctransaction &7a échoué, aucun argent n'a été retiré."

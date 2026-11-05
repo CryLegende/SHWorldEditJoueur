@@ -1,42 +1,21 @@
 package org.Cry_Legende.sHWorldEditJoueur.managers;
 
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
-import org.bukkit.ChatColor;
+import org.Cry_Legende.sHWorldEditJoueur.utils.ActionLog;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-
 /**
- * Gère la journalisation des actions du plugin dans la console et dans un fichier.
+ * Écrit les actions du plugin dans le fichier « actions » de SHLogs.
  */
 public class LogManager {
 
+    private static final String LOG_FILE = "actions";
+
     private final SHWorldEditJoueur plugin;
-    private final File logFile;
-    private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public LogManager(SHWorldEditJoueur plugin) {
         this.plugin = plugin;
-        this.logFile = new File(plugin.getDataFolder(), "logs.txt");
-
-        // S'assure que le fichier existe au démarrage du plugin
-        if (!logFile.exists()) {
-            try {
-                // Crée le dossier du plugin s'il n'existe pas
-                plugin.getDataFolder().mkdirs();
-                // Crée le fichier de logs
-                logFile.createNewFile();
-            } catch (IOException e) {
-                plugin.getLogger().severe("Impossible de créer le fichier de logs (logs.txt) !");
-                e.printStackTrace();
-            }
-        }
     }
 
     /**
@@ -77,36 +56,7 @@ public class LogManager {
         log(message);
     }
 
-    /**
-     * Méthode de base pour enregistrer un message dans la console et le fichier de log.
-     *
-     * @param message Le message à enregistrer.
-     */
     private void log(String message) {
-        String timestamp = dateFormat.format(new Date());
-        String formattedMessage = "[" + timestamp + "] " + message;
-
-        // 1. Log dans la console du serveur
-        plugin.getLogger().info(ChatColor.stripColor(formattedMessage));
-
-        // 2. Log dans le fichier logs.txt
-        logToFile(formattedMessage);
-    }
-
-    /**
-     * Écrit une ligne de manière synchronisée dans le fichier logs.txt.
-     *
-     * @param message Le message complet avec timestamp à écrire.
-     */
-    private synchronized void logToFile(String message) {
-        // L'utilisation de try-with-resources garantit que les ressources (FileWriter, PrintWriter)
-        // sont automatiquement fermées, même en cas d'erreur.
-        try (FileWriter fw = new FileWriter(logFile, true); // Le 'true' signifie qu'on ajoute à la fin du fichier (append)
-             PrintWriter pw = new PrintWriter(fw)) {
-            pw.println(message);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Erreur critique lors de l'écriture dans le fichier de logs !");
-            e.printStackTrace();
-        }
+        ActionLog.write(plugin, LOG_FILE, message);
     }
 }

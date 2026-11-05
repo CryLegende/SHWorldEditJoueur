@@ -14,7 +14,6 @@ import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
 import org.Cry_Legende.sHWorldEditJoueur.config.Group;
 import org.Cry_Legende.sHWorldEditJoueur.managers.ActionData;
 import org.Cry_Legende.sHWorldEditJoueur.utils.Common;
-import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -109,7 +108,8 @@ public class CutCommand implements CommandExecutor, TabCompleter {
             Mask mask = Masks.negate(new BlockTypeMask(countSession, BlockTypes.AIR, BlockTypes.CAVE_AIR, BlockTypes.VOID_AIR));
             nonAirBlocks = countSession.countBlocks(selection, mask);
         } catch (WorldEditException e) {
-            player.sendMessage(ChatColor.RED + "Erreur lors du comptage des blocs : " + e.getMessage());
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("count-error")
+                .replace("%error%", String.valueOf(e.getMessage())));
             return true;
         }
 

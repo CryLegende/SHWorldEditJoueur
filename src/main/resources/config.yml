@@ -1,16 +1,37 @@
-# Configuration de SHWorldEditJoueur par Cry_Legende
+# ----------------------------------------------------------------#
+#                Configuration de SHWorldEditJoueur               #
+# ----------------------------------------------------------------#
+#
+# Permet aux joueurs de placer ou de couper les blocs de leur sélection WorldEdit sur leur île,
+# contre de l'argent (Vault), avec une limite de blocs et un prix par groupe.
+#
+# Commandes :
+#   /place (alias /p)   Place dans la sélection le bloc cliqué dans l'inventaire.
+#   /place cancel       Annule l'action en attente.
+#   /cut (alias /c)     Coupe les blocs de la sélection et rend les objets.
+#   /cut confirm        Confirme la coupe.
+#   /cut cancel         Annule l'action en attente.
+#
+# Permissions :
+#   shwe.use              Utiliser /place et /cut (tous les joueurs par défaut).
+#   shwe.group.<groupe>   Appartenir à un groupe de la section groups (default, vip, vip+, vipelite).
+#
+# Les textes sont dans messages.yml. Le journal des /place et /cut est écrit dans le fichier « actions » de SHLogs.
 settings:
+  # Son joué à la fin d'un /place (nom de son ou clé minecraft:...).
   build-sound: "BLOCK_STONE_PLACE"
+  # Son joué à la fin d'un /cut (nom de son ou clé minecraft:...).
   cut-sound: "BLOCK_STONE_BREAK"
+  # Mot qui annule l'action en attente (/place <mot>, /cut <mot>).
   cancel-word: "cancel"
+  # Mot qui confirme la coupe en attente (/cut <mot>).
   confirm-word: "confirm"
-  cancel-time: 20 # secondes
+  # Secondes avant qu'une action en attente de confirmation expire.
+  cancel-time: 20
 
-  # Blocs qui ne donnent pas l'objet correspondant lorsqu'ils sont coupés.
-  # Ceci est utile pour ne pas remplacer des enchantements comme Silk Touch.
-  # Le format est "BLOC_CASSE:BLOC_A_DONNER". Utilisez "AIR" pour ne rien donner.
-  # Astuce : Pour la plupart des blocs (pierre -> roche, minerais, etc.), le plugin gère cela automatiquement.
-  # N'ajoutez ici que les exceptions que vous souhaitez.
+  # Objet rendu par /cut à la place du bloc coupé, comme sans Toucher de soie.
+  # Format "BLOC_COUPE:OBJET_RENDU" ou "BLOC_COUPE:OBJET_RENDU;quantité". AIR ne rend rien.
+  # Les autres blocs (pierre, minerais...) rendent leur objet habituel sans être listés.
   replace-give:
     - "GLASS:AIR"
     - "GLASS_PANE:AIR"
@@ -63,13 +84,15 @@ settings:
     - "REDSTONE_WIRE:REDSTONE"
 
   banned-blocks:
+    # Blocs que /cut ne coupe jamais.
     cut:
-      - "CHEST" #blocks that can't be cut when using the cut command
+      - "CHEST"
       - "HOPPER"
       - "BEDROCK"
       - "ARMOR_STAND"
       - "SPAWNER"
       - "DRAGON_EGG"
+      - "CREAKING_HEART"
       - "PLAYER_HEAD"
       - "LANTERN"
       - "TRAPPED_CHEST"
@@ -99,6 +122,12 @@ settings:
       - "JUNGLE_HANGING_SIGN"
       - "OAK_HANGING_SIGN"
       - "SPRUCE_HANGING_SIGN"
+      - "ACACIA_WALL_HANGING_SIGN"
+      - "BIRCH_WALL_HANGING_SIGN"
+      - "DARK_OAK_WALL_HANGING_SIGN"
+      - "JUNGLE_WALL_HANGING_SIGN"
+      - "OAK_WALL_HANGING_SIGN"
+      - "SPRUCE_WALL_HANGING_SIGN"
       - "ACACIA_WALL_SIGN"
       - "BIRCH_WALL_SIGN"
       - "DARK_OAK_WALL_SIGN"
@@ -112,6 +141,29 @@ settings:
       - "JUNGLE_SIGN"
       - "OAK_SIGN"
       - "SPRUCE_SIGN"
+      - "PALE_OAK_HANGING_SIGN"
+      - "PALE_OAK_WALL_HANGING_SIGN"
+      - "PALE_OAK_WALL_SIGN"
+      - "PALE_OAK_SIGN"
+      - "MANGROVE_HANGING_SIGN"
+      - "MANGROVE_WALL_HANGING_SIGN"
+      - "MANGROVE_WALL_SIGN"
+      - "MANGROVE_SIGN"
+      - "BAMBOO_HANGING_SIGN"
+      - "BAMBOO_WALL_HANGING_SIGN"
+      - "BAMBOO_WALL_SIGN"
+      - "BAMBOO_SIGN"
+      - "CHERRY_HANGING_SIGN"
+      - "CHERRY_WALL_HANGING_SIGN"
+      - "CHERRY_WALL_SIGN"
+      - "CHERRY_SIGN"
+      - "CRIMSON_HANGING_SIGN"
+      - "CRIMSON_WALL_HANGING_SIGN"
+      - "CRIMSON_WALL_SIGN"
+      - "CRIMSON_SIGN"
+      - "WARPED_HANGING_SIGN"
+      - "WARPED_WALL_HANGING_SIGN"
+      - "WARPED_SIGN"
       - "NETHER_PORTAL"
       - "WHITE_BED"
       - "ORANGE_BED"
@@ -131,6 +183,14 @@ settings:
       - "BLACK_BED"
       - "RESPAWN_ANCHOR"
       - "BARREL"
+      - "COPPER_CHEST"
+      - "EXPOSED_COPPER_CHEST"
+      - "WEATHERED_COPPER_CHEST"
+      - "OXIDIZED_COPPER_CHEST"
+      - "WAXED_COPPER_CHEST"
+      - "WAXED_EXPOSED_COPPER_CHEST"
+      - "WAXED_WEATHERED_COPPER_CHEST"
+      - "WAXED_OXIDIZED_COPPER_CHEST"
       - "KELP"
       - "TWISTING_VINES"
       - "WEEPING_VINES"
@@ -138,6 +198,7 @@ settings:
       - "SUGAR_CANE"
       - "CAULDRON"
       - "REDSTONE"
+    # Blocs que /place ne pose jamais.
     place:
       - "CHEST"
       - "HOPPER"
@@ -145,6 +206,7 @@ settings:
       - "ARMOR_STAND"
       - "SPAWNER"
       - "DRAGON_EGG"
+      - "CREAKING_HEART"
       - "PLAYER_HEAD"
       - "LANTERN"
       - "TRAPPED_CHEST"
@@ -154,51 +216,29 @@ settings:
       - "COMMAND_BLOCK"
       - "RESPAWN_ANCHOR"
       - "BARREL"
+      - "COPPER_CHEST"
+      - "EXPOSED_COPPER_CHEST"
+      - "WEATHERED_COPPER_CHEST"
+      - "OXIDIZED_COPPER_CHEST"
+      - "WAXED_COPPER_CHEST"
+      - "WAXED_EXPOSED_COPPER_CHEST"
+      - "WAXED_WEATHERED_COPPER_CHEST"
+      - "WAXED_OXIDIZED_COPPER_CHEST"
       - "KELP"
       - "TWISTING_VINES"
       - "WEEPING_VINES"
       - "BAMBOO"
       - "SUGAR_CANE"
 
-messages:
-  prefix: ""
-  no-perm: "&7&l« &c&lSH &8&l» &cVous n'avez pas la permission de faire ça."
-  player-only: "&7&l« &c&lSH &8&l» &cCette commande ne peut être exécutée que par un joueur."
-  make-selection: "&7&l« &c&lSH &8&l» &cVous devez d'abord faire une sélection avec la hache de WorldEdit."
-  no-island: "&7&l« &c&lSH &8&l» &cVous devez être sur votre île pour utiliser cette commande."
-  outside-island: "&7&l« &c&lSH &8&l» &cVotre sélection sort des limites de votre île."
-  no-island-perm: "&7&l« &c&lSH &8&l» &cLe chef de votre île n'a pas autorisé votre rôle à utiliser cette fonction. (/is permissions)"
-  confirm-place:
-    - "&r"
-    - "&7&l« &e&lSH &8&l» &fCliquez dans votre inventaire sur le bloc que vous souhaitez placer."
-    - "&7&l« &e&lSH &8&l» &7Sélection: &e%amount% blocs &8| &7Coût: &e%price% SHCoins &7par bloc"
-    - "&7&l« &e&lSH &8&l» &7Tapez &6/place cancel &7pour annuler. (Expire dans &e%time%s&7)"
-    - "&r"
-  confirm-cut:
-    - "&r"
-    - "&7&l« &e&lSH &8&l» &fUtilisez la commande &6/cut confirm &fpour confirmer."
-    - "&7&l« &e&lSH &8&l» &7Sélection: &e%amount% blocs &8| &7Coût: &e%price% SHCoins &7par bloc" #%total_price%
-    - "&7&o(Sauf exception, vous récupérerez dans votre inventaire les blocs coupés.)"
-    - "&r"
-  cut-success: "&7&l« &a&lSH &8&l» &7Vous avez récupéré &a%amount% blocs &7de votre sélection pour &a%price% SHC&7."
-  placed-success: "&7&l« &a&lSH &8&l» &7Vous avez placé &a%amount% blocs de %type% &7pour &a%price% SHC&7."
-  placed-partial: "&7&l« &e&lSH &8&l» &eVous n'aviez que &6%placed_amount% %type%&e, l'opération s'est arrêtée."
-  no-money: "&7&l« &c&lSH &8&l» &7Vous n'avez pas assez d'argent pour faire cela. Il vous manque &c%missing% SHCoins&7."
-  no-blocks: "&7&l« &c&lSH &8&l» &7Vous n'avez aucun bloc du type &c%type% &7dans votre inventaire."
-  invalid-block: "&7&l« &c&lSH &8&l» &cCet objet ne peut pas être placé."
-  banned-block-place: "&7&l« &c&lSH &8&l» &7Le bloc &c%type% &7ne peut pas être placé."
-  banned-block-cut: "&7&l« &c&lSH &8&l» &7Le bloc &c%type% &cne peut pas être coupé."
-  no-placeable-blocks-in-selection: "&7&l« &c&lSH &8&l» &7Votre sélection ne contient aucun bloc où placer des blocs (air, eau, etc.)."
-  no-cuttable-blocks-in-selection: "&7&l« &c&lSH &8&l» &7Votre sélection ne contient aucun bloc à couper."
-  selection-too-large: "&7&l« &c&lSH &8&l» &7Vous avez sélectionné une zone trop large."
-  action-cancelled: "&7&l« &c&lSH &8&l» &7Action annulée."
-  no-action: "&7&l« &c&lSH &8&l» &cVous n'avez aucune action en cours."
-  inventory-full: "&7&l« &c&lSH &8&l» &cVotre inventaire est plein ! Les blocs restants sont tombés au sol."
-  limit-exceeded: "&7&l« &e&lSH &8&l» &eVotre sélection dépasse votre limite, l'opération a été limitée à &6%max% blocs&e."
-
+# Limites et prix de chaque groupe. Un joueur reçoit le groupe de plus haute priorité dont il a la permission
+# shwe.group.<nom>.
+#   priority      Priorité du groupe (la plus haute est vérifiée en premier).
+#   max-blocks    Nombre maximum de blocs par action.
+#   place-price   Prix d'un bloc posé avec /place.
+#   cut-price     Prix d'un bloc coupé avec /cut.
 groups:
   vipelite:
-    priority: 4 # La priorité la plus haute est vérifiée en premier
+    priority: 4
     max-blocks: 5000
     place-price: 25
     cut-price: 25

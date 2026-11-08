@@ -7,7 +7,6 @@ import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.WorldEditException;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
-import com.sk89q.worldedit.function.mask.BlockTypeMask;
 import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.Region;
@@ -177,12 +176,17 @@ public class WorldEditManager {
         // (countBlocks, remplissage d'un BlockArrayClipboard dimensionné sur toute
         // la région, puis collage) pour le même résultat.
         int affected = 0;
+        org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
         try (EditSession session = WorldEdit.getInstance().newEditSession(world)) {
             for (BlockVector3 pt : region) {
                 if (affected >= budget) {
                     break;
                 }
                 if (!replaceableTypes.contains(session.getBlock(pt).getBlockType())) {
+                    continue;
+                }
+                // Un générateur en régénération est vide : il ne doit pas être rempli
+                if (plugin.getConfigManager().isProtected(bukkitWorld, pt.getX(), pt.getY(), pt.getZ())) {
                     continue;
                 }
                 session.setBlock(pt, blockToPlace);
@@ -245,7 +249,10 @@ public class WorldEditManager {
             // (une passe complète et une allocation dimensionnée sur le volume de la
             // région) avant de la relire bloc par bloc.
             // On ne fait que compter par matériau pendant le parcours : drops et clés SSB2 se calculent ensuite une fois par matériau.
+            // Les positions retenues sont gardées : le retrait touche exactement les blocs comptés et payés.
             Map<Material, Integer> cutCounts = new EnumMap<>(Material.class);
+            List<BlockVector3> toCut = new ArrayList<>();
+            org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
             try (EditSession readSession = WorldEdit.getInstance().newEditSession(world)) {
                 for (BlockVector3 pt : region) {
                     try {
@@ -255,8 +262,12 @@ public class WorldEditManager {
                         Material material = toMaterial(blockType);
                         if (material == null) continue;
                         if (plugin.getConfigManager().isBlockBanned("cut", material)) continue;
+                        if (plugin.getConfigManager().isProtected(bukkitWorld, pt.getX(), pt.getY(), pt.getZ())) continue;
 
                         cutCounts.merge(material, 1, Integer::sum);
+                        if (toCut.size() <= group.getMaxBlocks()) {
+                            toCut.add(BlockVector3.at(pt.getX(), pt.getY(), pt.getZ()));
+                        }
                     } catch (Exception loopException) {
                         plugin.getLogger().log(Level.SEVERE, "Erreur dans la boucle d'analyse du bloc à " + pt, loopException);
                     }
@@ -305,21 +316,13 @@ public class WorldEditManager {
                 return;
             }
 
+            // Seules les positions comptées sont vidées : blocs interdits (tous états, coffre orienté compris)
+            // et blocs protégés par métadonnée restent en place.
             try (EditSession writeSession = WorldEdit.getInstance().newEditSession(world)) {
-                // Par type de bloc (tous les états) : un masque sur l'état par défaut laissait détruire un coffre
-                // ou une trémie orienté autrement, avec son contenu.
-                Set<BlockType> bannedTypes = new HashSet<>();
-                for (Material banned : plugin.getConfigManager().getBannedCutMaterials()) {
-                    if (!banned.isBlock()) continue;
-                    BlockType bannedType = BukkitAdapter.asBlockType(banned);
-                    if (bannedType != null) bannedTypes.add(bannedType);
+                BlockState air = BlockTypes.AIR.getDefaultState();
+                for (BlockVector3 pt : toCut) {
+                    writeSession.setBlock(pt, air);
                 }
-
-                if (!bannedTypes.isEmpty()) {
-                    writeSession.setMask(new BlockTypeMask(writeSession, bannedTypes).inverse());
-                }
-
-                writeSession.setBlocks(region, BlockTypes.AIR.getDefaultState());
                 Operations.complete(writeSession.commit());
             }
 

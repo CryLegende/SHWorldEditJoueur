@@ -230,6 +230,11 @@ settings:
       - "BAMBOO"
       - "SUGAR_CANE"
 
+  # Métadonnées Bukkit posées par d'autres plugins sur les blocs à protéger : /cut ne coupe pas
+  # ces blocs et /place ne les remplit pas. « elitegenerator » = bloc d'un générateur EliteGenerator.
+  protected-metadata:
+    - "elitegenerator"
+
 # Limites et prix de chaque groupe. Un joueur reçoit le groupe de plus haute priorité dont il a la permission
 # shwe.group.<nom>.
 #   priority      Priorité du groupe (la plus haute est vérifiée en premier).

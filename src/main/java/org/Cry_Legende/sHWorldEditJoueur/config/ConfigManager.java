@@ -6,6 +6,8 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.Sound;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -37,6 +39,8 @@ public class ConfigManager {
     // Ensembles : isBlockBanned() est appelé pour chaque bloc d'une sélection
     private Set<Material> bannedPlace = EnumSet.noneOf(Material.class);
     private Set<Material> bannedCut = EnumSet.noneOf(Material.class);
+    // Métadonnées Bukkit qui protègent un bloc posé par un autre plugin (générateurs...)
+    private List<String> protectedMetadata = List.of();
 
     // Messages
     private String prefix = "";
@@ -91,6 +95,10 @@ public class ConfigManager {
             .map(s -> Material.matchMaterial(s.trim().toUpperCase()))
             .filter(Objects::nonNull)
             .collect(Collectors.toCollection(() -> EnumSet.noneOf(Material.class)));
+        protectedMetadata = settings.getStringList("protected-metadata").stream()
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
 
         replaceGiveMap.clear();
         List<String> replaceGiveList = settings.getStringList("replace-give");
@@ -256,6 +264,19 @@ public class ConfigManager {
     }
 
     /**
+     * Vrai si le bloc porte une des métadonnées de {@code settings.protected-metadata} :
+     * ni /cut ni /place n'y touchent.
+     */
+    public boolean isProtected(World world, int x, int y, int z) {
+        if (protectedMetadata.isEmpty()) return false;
+        Block block = world.getBlockAt(x, y, z);
+        for (String key : protectedMetadata) {
+            if (block.hasMetadata(key)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Récupère le drop personnalisé pour un matériau.
      */
     public ItemStack getCustomDrop(Material material) {
@@ -284,7 +305,4 @@ public class ConfigManager {
         return cancelTime;
     }
 
-    public Set<Material> getBannedCutMaterials() {
-        return Collections.unmodifiableSet(bannedCut);
-    }
 }

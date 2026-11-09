@@ -16,6 +16,7 @@ import com.sk89q.worldedit.world.block.BlockType;
 import com.sk89q.worldedit.world.block.BlockTypes;
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
 import org.Cry_Legende.sHWorldEditJoueur.config.Group;
+import org.Cry_Legende.sHWorldEditJoueur.utils.BlockTypeReader;
 import org.Cry_Legende.sHWorldEditJoueur.utils.Common;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -39,6 +40,12 @@ public class WorldEditManager {
     private final Set<BlockType> replaceableTypes;
 
     /**
+     * Les mêmes types en matériaux Bukkit, pour la lecture par copie de chunk ({@link BlockTypeReader}).
+     */
+    private static final Set<Material> REPLACEABLE_MATERIALS = EnumSet.of(
+        Material.AIR, Material.CAVE_AIR, Material.VOID_AIR, Material.WATER, Material.LAVA);
+
+    /**
      * Cache BlockType -> Material, pour éviter une conversion par bloc dans /cut.
      */
     private final Map<BlockType, Material> materialCache = new HashMap<>();
@@ -55,6 +62,15 @@ public class WorldEditManager {
             }
         }
         this.replaceableTypes = Collections.unmodifiableSet(types);
+    }
+
+    private boolean isReplaceable(BlockTypeReader reader, EditSession session, BlockVector3 pt) {
+        Material type = reader.type(pt.getX(), pt.getY(), pt.getZ());
+        if (type != null) {
+            return REPLACEABLE_MATERIALS.contains(type);
+        }
+        // Chunk non chargé : lecture par FAWE comme avant
+        return replaceableTypes.contains(session.getBlock(pt).getBlockType());
     }
 
     private Material toMaterial(BlockType type) {
@@ -87,9 +103,10 @@ public class WorldEditManager {
         }
 
         int found = 0;
+        BlockTypeReader reader = new BlockTypeReader(BukkitAdapter.adapt(world));
         try (EditSession session = WorldEdit.getInstance().newEditSession(world)) {
             for (BlockVector3 pt : region) {
-                if (replaceableTypes.contains(session.getBlock(pt).getBlockType())) {
+                if (isReplaceable(reader, session, pt)) {
                     found++;
                     if (found >= limit) {
                         break;
@@ -177,12 +194,13 @@ public class WorldEditManager {
         // la région, puis collage) pour le même résultat.
         int affected = 0;
         org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
+        BlockTypeReader reader = new BlockTypeReader(bukkitWorld);
         try (EditSession session = WorldEdit.getInstance().newEditSession(world)) {
             for (BlockVector3 pt : region) {
                 if (affected >= budget) {
                     break;
                 }
-                if (!replaceableTypes.contains(session.getBlock(pt).getBlockType())) {
+                if (!isReplaceable(reader, session, pt)) {
                     continue;
                 }
                 // Un générateur en régénération est vide : il ne doit pas être rempli
@@ -253,14 +271,20 @@ public class WorldEditManager {
             Map<Material, Integer> cutCounts = new EnumMap<>(Material.class);
             List<BlockVector3> toCut = new ArrayList<>();
             org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
+            BlockTypeReader reader = new BlockTypeReader(bukkitWorld);
             try (EditSession readSession = WorldEdit.getInstance().newEditSession(world)) {
                 for (BlockVector3 pt : region) {
                     try {
-                        BlockType blockType = readSession.getBlock(pt).getBlockType();
-                        if (blockType.getMaterial().isAir()) continue;
-
-                        Material material = toMaterial(blockType);
-                        if (material == null) continue;
+                        Material material = reader.type(pt.getX(), pt.getY(), pt.getZ());
+                        if (material == null) {
+                            // Chunk non chargé : lecture par FAWE comme avant
+                            BlockType blockType = readSession.getBlock(pt).getBlockType();
+                            if (blockType.getMaterial().isAir()) continue;
+                            material = toMaterial(blockType);
+                            if (material == null) continue;
+                        } else if (material.isAir()) {
+                            continue;
+                        }
                         if (plugin.getConfigManager().isBlockBanned("cut", material)) continue;
                         if (plugin.getConfigManager().isProtected(bukkitWorld, pt.getX(), pt.getY(), pt.getZ())) continue;
 

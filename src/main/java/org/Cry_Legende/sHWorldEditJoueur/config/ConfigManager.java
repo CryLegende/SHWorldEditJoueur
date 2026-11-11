@@ -27,27 +27,33 @@ import java.util.stream.Collectors;
  */
 public class ConfigManager {
 
+    /** Préfixe du nœud de palier : shworldeditjoueur.group.<clé du groupe dans config.yml> (ex. shworldeditjoueur.group.vip). */
+    public static final String GROUP_PERMISSION_PREFIX = "shworldeditjoueur.group.";
+
     private final SHWorldEditJoueur plugin;
 
+    // Le reload construit de nouvelles valeurs puis les remplace d'un bloc : les champs sont volatiles et les
+    // collections jamais modifiées sur place (elles sont lues pendant les actions, qui peuvent durer plusieurs ticks).
+
     // Settings
-    private Sound buildSound;
-    private Sound cutSound;
-    private String cancelWord;
-    private String confirmWord;
-    private long cancelTime;
-    private Map<Material, ItemStack> replaceGiveMap = new HashMap<>();
+    private volatile Sound buildSound;
+    private volatile Sound cutSound;
+    private volatile String cancelWord = "cancel";
+    private volatile String confirmWord = "confirm";
+    private volatile long cancelTime = 20;
+    private volatile Map<Material, ItemStack> replaceGiveMap = new HashMap<>();
     // Ensembles : isBlockBanned() est appelé pour chaque bloc d'une sélection
-    private Set<Material> bannedPlace = EnumSet.noneOf(Material.class);
-    private Set<Material> bannedCut = EnumSet.noneOf(Material.class);
+    private volatile Set<Material> bannedPlace = EnumSet.noneOf(Material.class);
+    private volatile Set<Material> bannedCut = EnumSet.noneOf(Material.class);
     // Métadonnées Bukkit qui protègent un bloc posé par un autre plugin (générateurs...)
-    private List<String> protectedMetadata = List.of();
+    private volatile List<String> protectedMetadata = List.of();
 
     // Messages
-    private String prefix = "";
-    private Map<String, String> messages = new HashMap<>();
+    private volatile String prefix = "";
+    private volatile Map<String, String> messages = new HashMap<>();
 
     // Groups
-    private Map<String, Group> groups = new HashMap<>();
+    private volatile Map<String, Group> groups = new HashMap<>();
 
     public ConfigManager(SHWorldEditJoueur plugin) {
         this.plugin = plugin;
@@ -75,32 +81,36 @@ public class ConfigManager {
             settings = plugin.getConfig().createSection("settings");
         }
 
-        buildSound = sound(settings.getString("build-sound", "BLOCK_STONE_PLACE"));
-        cutSound = sound(settings.getString("cut-sound", "BLOCK_STONE_BREAK"));
-        if (buildSound == null || cutSound == null) {
+        Sound newBuildSound = sound(settings.getString("build-sound", "BLOCK_STONE_PLACE"));
+        Sound newCutSound = sound(settings.getString("cut-sound", "BLOCK_STONE_BREAK"));
+        if (newBuildSound == null || newCutSound == null) {
             plugin.getLogger().warning("Un son invalide a été spécifié dans config.yml. Utilisation des valeurs par défaut.");
-            buildSound = Sound.BLOCK_STONE_PLACE;
-            cutSound = Sound.BLOCK_STONE_BREAK;
+            newBuildSound = Sound.BLOCK_STONE_PLACE;
+            newCutSound = Sound.BLOCK_STONE_BREAK;
         }
+        buildSound = newBuildSound;
+        cutSound = newCutSound;
 
         cancelWord = settings.getString("cancel-word", "cancel");
         confirmWord = settings.getString("confirm-word", "confirm");
         cancelTime = settings.getInt("cancel-time", 20);
 
-        bannedPlace = settings.getStringList("banned-blocks.place").stream()
+        Set<Material> newBannedPlace = settings.getStringList("banned-blocks.place").stream()
             .map(s -> Material.matchMaterial(s.trim().toUpperCase()))
             .filter(Objects::nonNull)
             .collect(Collectors.toCollection(() -> EnumSet.noneOf(Material.class)));
-        bannedCut = settings.getStringList("banned-blocks.cut").stream()
+        Set<Material> newBannedCut = settings.getStringList("banned-blocks.cut").stream()
             .map(s -> Material.matchMaterial(s.trim().toUpperCase()))
             .filter(Objects::nonNull)
             .collect(Collectors.toCollection(() -> EnumSet.noneOf(Material.class)));
+        bannedPlace = newBannedPlace;
+        bannedCut = newBannedCut;
         protectedMetadata = settings.getStringList("protected-metadata").stream()
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .toList();
 
-        replaceGiveMap.clear();
+        Map<Material, ItemStack> newReplaceGive = new HashMap<>();
         List<String> replaceGiveList = settings.getStringList("replace-give");
         for (String entry : replaceGiveList) {
             try {
@@ -118,12 +128,13 @@ public class ConfigManager {
 
                 ItemStack toItemStack = parseItemStack(parts[1].trim());
                 if (toItemStack != null) {
-                    replaceGiveMap.put(fromMaterial, toItemStack);
+                    newReplaceGive.put(fromMaterial, toItemStack);
                 }
             } catch (Exception e) {
                 plugin.getLogger().warning("Erreur de parsing pour l'entrée 'replace-give': " + entry);
             }
         }
+        replaceGiveMap = newReplaceGive;
     }
 
     /**
@@ -151,7 +162,13 @@ public class ConfigManager {
         if (!file.exists()) {
             plugin.saveResource("messages.yml", false);
         }
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        YamlConfiguration yaml;
+        try {
+            yaml = ReloadException.read(file);
+        } catch (ReloadException e) {
+            plugin.getLogger().warning("messages.yml illisible, textes du jar utilisés : " + e.getMessage());
+            yaml = new YamlConfiguration();
+        }
         try (InputStream in = plugin.getResource("messages.yml")) {
             if (in != null) {
                 yaml.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8)));
@@ -160,8 +177,7 @@ public class ConfigManager {
             plugin.getLogger().warning("Lecture des messages livrés avec le plugin impossible : " + e.getMessage());
         }
 
-        prefix = yaml.getString("prefix", "");
-        messages.clear();
+        Map<String, String> newMessages = new HashMap<>();
         Set<String> keys = new LinkedHashSet<>(yaml.getKeys(false));
         if (yaml.getDefaults() != null) {
             keys.addAll(yaml.getDefaults().getKeys(false));
@@ -170,11 +186,13 @@ public class ConfigManager {
             if (key.equals("prefix")) continue;
 
             if (yaml.isList(key)) {
-                messages.put(key, String.join("\n", yaml.getStringList(key)));
+                newMessages.put(key, String.join("\n", yaml.getStringList(key)));
             } else {
-                messages.put(key, yaml.getString(key));
+                newMessages.put(key, yaml.getString(key));
             }
         }
+        prefix = yaml.getString("prefix", "");
+        messages = newMessages;
     }
 
     /**
@@ -187,7 +205,7 @@ public class ConfigManager {
             return;
         }
 
-        groups.clear();
+        Map<String, Group> newGroups = new HashMap<>();
         for (String groupName : groupSection.getKeys(false)) {
             ConfigurationSection current = groupSection.getConfigurationSection(groupName);
             if (current != null) {
@@ -198,9 +216,10 @@ public class ConfigManager {
                     current.getDouble("place-price", 30.0),
                     current.getDouble("cut-price", 30.0)
                 );
-                groups.put(groupName, group);
+                newGroups.put(groupName, group);
             }
         }
+        groups = newGroups;
     }
 
     /**
@@ -237,7 +256,7 @@ public class ConfigManager {
      */
     public Group getPlayerGroup(Player player) {
         return groups.values().stream()
-            .filter(group -> player.hasPermission("shwe.group." + group.getName()))
+            .filter(group -> player.hasPermission(GROUP_PERMISSION_PREFIX + group.getName()))
             .max(Comparator.comparingInt(Group::getPriority))
             .orElse(groups.getOrDefault("default", new Group("default", 1, 500, 30, 30)));
     }

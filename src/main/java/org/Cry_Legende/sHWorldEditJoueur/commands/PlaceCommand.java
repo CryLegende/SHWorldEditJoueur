@@ -36,7 +36,7 @@ public class PlaceCommand implements CommandExecutor, TabCompleter {
 
         Player player = (Player) sender;
 
-        if (!player.hasPermission("shwe.use")) {
+        if (!player.hasPermission(SHWorldEditJoueur.PERMISSION_USE)) {
             Common.sendMessage(player, plugin.getConfigManager().getMessage("no-perm"));
             return true;
         }

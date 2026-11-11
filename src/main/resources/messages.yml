@@ -8,12 +8,12 @@
 #   &a succès, &e information, &6avertissement, &c erreur.
 # Une liste donne un texte de plusieurs lignes, une ligne par élément.
 # Placeholders : indiqués avant chaque message, écrits %comme-ceci%.
-# Ce fichier est lu au démarrage du serveur. Une clé absente reprend le texte livré avec le plugin.
+# Ce fichier est lu au démarrage du serveur et par /shworldeditjoueur reload. Une clé absente reprend le texte livré avec le plugin.
 
 # Texte ajouté devant chaque message (vide : les messages portent déjà leur préfixe).
 prefix: ""
 
-# Le joueur n'a pas la permission shwe.use.
+# Le joueur n'a pas la permission shworldeditjoueur.use (ou /shworldeditjoueur sans aucun droit d'administration).
 no-perm: "&7&l« &c&lSH &8&l» &cVous n'avez pas la permission de faire ça."
 
 # La commande est lancée depuis la console.
@@ -103,3 +103,30 @@ internal-error: "&7&l« &c&lSH &8&l» &7Une erreur interne est survenue. Veuille
 
 # Le retrait de l'argent a échoué pendant /place ou /cut.
 no-money-transaction-failed: "&7&l« &c&lSH &8&l» &7La &ctransaction &7a échoué, aucun argent n'a été retiré."
+
+# /shworldeditjoueur sans sous-commande ou avec une sous-commande inconnue.
+# Placeholders : %commands% sous-commandes que l'expéditeur peut utiliser.
+usage-line: "&7&l« &e&lSH &8&l» &7Utilisation : &e/shworldeditjoueur &7<&e%commands%&7>"
+
+# /shworldeditjoueur info depuis la console, sans nom de joueur.
+usage-info: "&7&l« &e&lSH &8&l» &7Utilisation : &e/shworldeditjoueur info <joueur>"
+
+# /shworldeditjoueur reload.
+reload: "&7&l« &a&lSH &8&l» &7Configuration &arechargée&7."
+
+# Fichier YAML illisible : l'ancienne configuration reste en place.
+# Placeholders : %file% fichier, %line% ligne, %error% problème relevé.
+reload-failed: "&7&l« &c&lSH &8&l» &7Rechargement &cimpossible &7: &c%file% &7ligne &c%line%&7, %error%. Ancienne configuration conservée."
+
+# /shworldeditjoueur info <joueur> : joueur absent ou hors ligne. Placeholders : %player% nom demandé.
+player-not-found: "&7&l« &c&lSH &8&l» &7Le joueur &c%player% &7n'est &cpas en ligne&7."
+
+# /shworldeditjoueur info. Placeholders : %player% joueur, %group% palier appliqué, %max% blocs maximum par action,
+# %place_price% et %cut_price% prix d'un bloc, %pending% action en attente (info-pending-*).
+info:
+  - "&7&l« &e&lSH &8&l» &7Palier de &e%player% &7: &e%group%"
+  - "&7&l« &e&lSH &8&l» &7Limite : &e%max% blocs &7par action &8| &7/place : &e%place_price% &7par bloc &8| &7/cut : &e%cut_price% &7par bloc"
+  - "&7&l« &e&lSH &8&l» &7Action en attente : &e%pending%"
+info-pending-none: "aucune"
+info-pending-place: "/place"
+info-pending-cut: "/cut"

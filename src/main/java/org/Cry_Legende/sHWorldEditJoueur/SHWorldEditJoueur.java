@@ -1,6 +1,7 @@
 package org.Cry_Legende.sHWorldEditJoueur;
 
 import com.bgsoftware.superiorskyblock.api.island.IslandPrivilege;
+import org.Cry_Legende.sHWorldEditJoueur.commands.AdminCommand;
 import org.Cry_Legende.sHWorldEditJoueur.commands.CutCommand;
 import org.Cry_Legende.sHWorldEditJoueur.commands.PlaceCommand;
 import org.Cry_Legende.sHWorldEditJoueur.config.ConfigManager;
@@ -17,6 +18,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.logging.Level;
 
 public final class SHWorldEditJoueur extends JavaPlugin {
+
+    /** /place et /cut (tous les joueurs par défaut). */
+    public static final String PERMISSION_USE = "shworldeditjoueur.use";
 
     private static SHWorldEditJoueur instance;
 
@@ -92,6 +96,10 @@ public final class SHWorldEditJoueur extends JavaPlugin {
         CutCommand cutCommand = new CutCommand(this);
         getCommand("cut").setExecutor(cutCommand);
         getCommand("cut").setTabCompleter(cutCommand);
+
+        AdminCommand adminCommand = new AdminCommand(this);
+        getCommand("shworldeditjoueur").setExecutor(adminCommand);
+        getCommand("shworldeditjoueur").setTabCompleter(adminCommand);
     }
 
     private boolean setupHooks() {

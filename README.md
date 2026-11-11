@@ -26,18 +26,26 @@ Utilisé sur : **Opale**.
 
 | Commande | Alias | Description | Permission |
 |---|---|---|---|
-| `/place` | `/p` | Place des blocs dans votre sélection. | — |
-| `/cut` | `/c` | Coupe les blocs de votre sélection. | — |
+| `/place [cancel]` | `/p` | Place des blocs dans votre sélection. | `shworldeditjoueur.use` |
+| `/cut [confirm\|cancel]` | — | Coupe les blocs de votre sélection. | `shworldeditjoueur.use` |
+| `/shworldeditjoueur reload` | `/shwe` | Recharge `config.yml` et `messages.yml` (console comprise). Un fichier YAML invalide laisse l'ancienne configuration en place et affiche le fichier et la ligne de l'erreur. Les actions en attente ne changent pas. | `shworldeditjoueur.admin.reload` |
+| `/shworldeditjoueur info [joueur]` | `/shwe` | Palier appliqué à un joueur : groupe, limite de blocs, prix, action en attente. | `shworldeditjoueur.admin.info` |
 
 ## Permissions
 
 | Permission | Description | Par défaut |
 |---|---|---|
-| `shwe.use` | Permet d'utiliser les commandes de base du plugin. | `true` |
-| `shwe.group.default` | Groupe par défaut pour SHWorldEditJoueur. | `true` |
-| `shwe.group.vip` | Groupe VIP pour SHWorldEditJoueur. | `op` |
-| `shwe.group.vip+` | Groupe VIP+ pour SHWorldEditJoueur. | `op` |
-| `shwe.group.vipelite` | Groupe VIP Elite pour SHWorldEditJoueur. | `op` |
+| `shworldeditjoueur.use` | Permet d'utiliser `/place` et `/cut`. | `true` |
+| `shworldeditjoueur.group.default` | Palier par défaut. | `true` |
+| `shworldeditjoueur.group.vip` | Palier VIP. | `op` |
+| `shworldeditjoueur.group.vip+` | Palier VIP+. | `op` |
+| `shworldeditjoueur.group.vipelite` | Palier VIP Elite. | `op` |
+| `shworldeditjoueur.group.<groupe>` | Un nœud par groupe de la section `groups` de `config.yml` (exemple : un groupe `youtube` demande `shworldeditjoueur.group.youtube`, à accorder dans LuckPerms). Le groupe de plus haute priorité dont le joueur a le nœud s'applique. | `op` (non déclaré) |
+| `shworldeditjoueur.admin` | Toutes les sous-commandes de `/shworldeditjoueur`. | `op` |
+| `shworldeditjoueur.admin.reload` | `/shworldeditjoueur reload`. | `op` |
+| `shworldeditjoueur.admin.info` | `/shworldeditjoueur info`. | `op` |
+
+Le privilège d'île SuperiorSkyblock2 `SHWORLDEDIT_USE` (réglé par île dans `/is permissions`) n'est pas une permission de serveur : il reste inchangé.
 
 ## Configuration
 

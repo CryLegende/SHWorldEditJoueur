@@ -14,18 +14,36 @@ commands:
   cut:
     description: Coupe les blocs de votre sélection.
     usage: /cut [confirm|cancel]
-    aliases: [c]
+  shworldeditjoueur:
+    description: Administration de SHWorldEditJoueur.
+    usage: /shworldeditjoueur <reload|info>
+    aliases: [shwe]
 
 permissions:
-  shwe.use:
-    description: Permet d'utiliser les commandes de base du plugin.
+  shworldeditjoueur.use:
+    description: Permet d'utiliser /place et /cut.
     default: true
-  shwe.group.default:
-    description: Groupe par défaut pour SHWorldEditJoueur.
+  shworldeditjoueur.group.default:
+    description: Palier par défaut (limite de blocs et prix du groupe default de config.yml).
     default: true
-  shwe.group.vip:
-    description: Groupe VIP pour SHWorldEditJoueur.
-  shwe.group.vip+:
-    description: Groupe VIP+ pour SHWorldEditJoueur.
-  shwe.group.vipelite:
-    description: Groupe VIP Elite pour SHWorldEditJoueur.
+  shworldeditjoueur.group.vip:
+    description: Palier VIP (limite de blocs et prix du groupe vip de config.yml).
+    default: op
+  shworldeditjoueur.group.vip+:
+    description: Palier VIP+ (limite de blocs et prix du groupe vip+ de config.yml).
+    default: op
+  shworldeditjoueur.group.vipelite:
+    description: Palier VIP Elite (limite de blocs et prix du groupe vipelite de config.yml).
+    default: op
+  shworldeditjoueur.admin:
+    description: Toutes les sous-commandes de /shworldeditjoueur.
+    default: op
+    children:
+      shworldeditjoueur.admin.reload: true
+      shworldeditjoueur.admin.info: true
+  shworldeditjoueur.admin.reload:
+    description: /shworldeditjoueur reload (recharger config.yml et messages.yml).
+    default: op
+  shworldeditjoueur.admin.info:
+    description: /shworldeditjoueur info (palier appliqué à un joueur).
+    default: op

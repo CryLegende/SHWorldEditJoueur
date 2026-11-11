@@ -8,13 +8,24 @@
 # Commandes :
 #   /place (alias /p)   Place dans la sélection le bloc cliqué dans l'inventaire.
 #   /place cancel       Annule l'action en attente.
-#   /cut (alias /c)     Coupe les blocs de la sélection et rend les objets.
+#   /cut                Coupe les blocs de la sélection et rend les objets.
 #   /cut confirm        Confirme la coupe.
 #   /cut cancel         Annule l'action en attente.
+#   /shworldeditjoueur reload   (alias /shwe, console comprise)   Recharge config.yml et messages.yml : prix, limites,
+#                       groupes, blocs interdits, objets rendus, sons, textes. Un fichier YAML invalide laisse l'ancienne
+#                       configuration en place et affiche le fichier et la ligne. Les actions en attente ne changent pas.
+#   /shworldeditjoueur info [joueur]   Palier que le plugin applique à un joueur : groupe, limite de blocs, prix, action
+#                       en attente (console : le joueur est obligatoire, en ligne).
 #
 # Permissions :
-#   shwe.use              Utiliser /place et /cut (tous les joueurs par défaut).
-#   shwe.group.<groupe>   Appartenir à un groupe de la section groups (default, vip, vip+, vipelite).
+#   shworldeditjoueur.use                Utiliser /place et /cut (tous les joueurs par défaut).
+#   shworldeditjoueur.group.<groupe>     Appartenir à un groupe de la section groups : default (tous), vip, vip+, vipelite
+#                                        (op par défaut). Le nœud est construit avec la clé du groupe : un groupe
+#                                        « youtube » ajouté à groups demande shworldeditjoueur.group.youtube, à accorder
+#                                        dans LuckPerms.
+#   shworldeditjoueur.admin              /shworldeditjoueur reload et info (op par défaut).
+#   shworldeditjoueur.admin.reload       /shworldeditjoueur reload (op par défaut).
+#   shworldeditjoueur.admin.info         /shworldeditjoueur info (op par défaut).
 #
 # Les textes sont dans messages.yml. Le journal des /place et /cut est écrit dans le fichier « actions » de SHLogs.
 settings:
@@ -236,7 +247,7 @@ settings:
     - "elitegenerator"
 
 # Limites et prix de chaque groupe. Un joueur reçoit le groupe de plus haute priorité dont il a la permission
-# shwe.group.<nom>.
+# shworldeditjoueur.group.<nom>.
 #   priority      Priorité du groupe (la plus haute est vérifiée en premier).
 #   max-blocks    Nombre maximum de blocs par action.
 #   place-price   Prix d'un bloc posé avec /place.

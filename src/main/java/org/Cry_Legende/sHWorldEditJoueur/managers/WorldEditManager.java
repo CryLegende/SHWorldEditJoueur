@@ -195,6 +195,7 @@ public class WorldEditManager {
         int affected = 0;
         org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
         BlockTypeReader reader = new BlockTypeReader(bukkitWorld);
+        Set<Long> touchedChunks = new HashSet<>();
         try (EditSession session = WorldEdit.getInstance().newEditSession(world)) {
             for (BlockVector3 pt : region) {
                 if (affected >= budget) {
@@ -208,6 +209,7 @@ public class WorldEditManager {
                     continue;
                 }
                 session.setBlock(pt, blockToPlace);
+                touchedChunks.add(((long) (pt.getX() >> 4) << 32) | ((pt.getZ() >> 4) & 0xFFFFFFFFL));
                 affected++;
             }
             Operations.complete(session.commit());
@@ -241,6 +243,7 @@ public class WorldEditManager {
         if (blockKey != null) {
             island.handleBlockPlace(blockKey, affected, true);
         }
+        markChunksDirty(island, bukkitWorld, touchedChunks);
 
         double chargedCost = affected * group.getPlacePrice();
         Common.sendMessage(player, plugin.getConfigManager().getMessage("placed-success")
@@ -250,6 +253,25 @@ public class WorldEditManager {
         player.playSound(player.getLocation(), plugin.getConfigManager().getBuildSound(), 1.0f, 1.0f);
 
         plugin.getLogManager().logPlace(player, affected, template.getType(), chargedCost);
+    }
+
+    /**
+     * Le calcul du niveau (/is level) ne lit que les chunks que SuperiorSkyblock2 sait occupés : un /place dans un
+     * chunk encore vide doit l'y ajouter, sinon le prochain calcul ignore ces blocs.
+     */
+    private static void markChunksDirty(Island island, org.bukkit.World world, Set<Long> chunks) {
+        List<long[]> toMark = new ArrayList<>();
+        for (long chunk : chunks) {
+            int chunkX = (int) (chunk >> 32);
+            int chunkZ = (int) chunk;
+            if (!island.isChunkDirty(world, chunkX, chunkZ)) {
+                toMark.add(new long[]{chunkX, chunkZ});
+            }
+        }
+        for (int i = 0; i < toMark.size(); i++) {
+            long[] chunk = toMark.get(i);
+            island.markChunkDirty(world, (int) chunk[0], (int) chunk[1], i == toMark.size() - 1);
+        }
     }
 
     public void executeCut(Player player, Region region, Island island) {

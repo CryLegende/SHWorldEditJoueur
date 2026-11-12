@@ -15,40 +15,56 @@ import com.sk89q.worldedit.world.block.BlockState;
 import com.sk89q.worldedit.world.block.BlockType;
 import com.sk89q.worldedit.world.block.BlockTypes;
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
+import org.Cry_Legende.sHWorldEditJoueur.config.ConfigManager;
 import org.Cry_Legende.sHWorldEditJoueur.config.Group;
 import org.Cry_Legende.sHWorldEditJoueur.utils.BlockTypeReader;
 import org.Cry_Legende.sHWorldEditJoueur.utils.Common;
+import org.Cry_Legende.sHWorldEditJoueur.utils.SectionReader;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.plugin.IllegalPluginAccessException;
 
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.IntConsumer;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 public class WorldEditManager {
 
+    /** Délai laissé aux /place en cours quand le plugin s'arrête. */
+    private static final long SHUTDOWN_WAIT_SECONDS = 5;
+
     private final SHWorldEditJoueur plugin;
 
     /**
-     * Types de blocs considérés comme remplaçables par /place.
-     * Construit une seule fois : tester l'appartenance à ce Set ne lit que l'état
-     * du bloc, alors qu'un BlockMask force la lecture du bloc complet (NBT inclus)
-     * à chaque position, ce qui coûtait l'essentiel du temps de la commande.
+     * États de bloc où /place peut poser (air, eau, lave, tous niveaux), indexés par numéro d'état FAWE.
      */
-    private final Set<BlockType> replaceableTypes;
-
-    /**
-     * Les mêmes types en matériaux Bukkit, pour la lecture par copie de chunk ({@link BlockTypeReader}).
-     */
-    private static final Set<Material> REPLACEABLE_MATERIALS = EnumSet.of(
-        Material.AIR, Material.CAVE_AIR, Material.VOID_AIR, Material.WATER, Material.LAVA);
+    private final boolean[] replaceableStates;
 
     /**
      * Cache BlockType -> Material, pour éviter une conversion par bloc dans /cut.
      */
     private final Map<BlockType, Material> materialCache = new HashMap<>();
+
+    /**
+     * Lecture de la sélection et pose des blocs de /place, hors du thread principal. Sur le thread principal ne
+     * restent que l'argent, l'inventaire et SuperiorSkyblock2.
+     */
+    private final ExecutorService worker;
+
+    /** Joueurs et îles dont un /place est en cours d'exécution (thread principal uniquement). */
+    private final Set<UUID> busyPlayers = new HashSet<>();
+    private final Set<UUID> busyIslands = new HashSet<>();
+
+    /** Fins de /place déjà payés : exécutées à l'arrêt du plugin si le planificateur ne l'a pas fait. */
+    private final Set<MainTask> pendingFinishes = ConcurrentHashMap.newKeySet();
 
     public WorldEditManager(SHWorldEditJoueur plugin) {
         this.plugin = plugin;
@@ -61,16 +77,35 @@ public class WorldEditManager {
                 types.add(type);
             }
         }
-        this.replaceableTypes = Collections.unmodifiableSet(types);
+        this.replaceableStates = SectionReader.acceptedStates(types);
+
+        AtomicInteger threadNumber = new AtomicInteger();
+        this.worker = Executors.newFixedThreadPool(2, task -> {
+            Thread thread = new Thread(task, "SHWorldEditJoueur-place-" + threadNumber.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
-    private boolean isReplaceable(BlockTypeReader reader, EditSession session, BlockVector3 pt) {
-        Material type = reader.type(pt.getX(), pt.getY(), pt.getZ());
-        if (type != null) {
-            return REPLACEABLE_MATERIALS.contains(type);
+    /**
+     * Attend la fin des /place en cours et applique ceux déjà payés. Appelé par onDisable.
+     */
+    public void shutdown() {
+        worker.shutdown();
+        try {
+            if (!worker.awaitTermination(SHUTDOWN_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                plugin.getLogger().warning("Des /place étaient encore en cours à l'arrêt du plugin.");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
-        // Chunk non chargé : lecture par FAWE comme avant
-        return replaceableTypes.contains(session.getBlock(pt).getBlockType());
+        for (MainTask task : new ArrayList<>(pendingFinishes)) {
+            try {
+                task.run();
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.SEVERE, "Erreur en terminant un /place à l'arrêt du plugin", e);
+            }
+        }
     }
 
     private Material toMaterial(BlockType type) {
@@ -83,43 +118,80 @@ public class WorldEditManager {
     }
 
     /**
-     * Compte les blocs remplaçables d'une région, en s'arrêtant dès que {@code limit}
-     * est atteint.
-     *
-     * <p>Remplace {@code EditSession.countBlocks(region, BlockMask)} : cette méthode
-     * parcourait la région entière sans sortie anticipée et lisait le bloc complet
-     * (NBT) à chaque position. Ici on ne lit que l'état du bloc et on s'arrête dès
-     * que le résultat ne peut plus influencer la décision, la limite du groupe
-     * plafonnant de toute façon ce que le joueur peut poser.
-     *
-     * @param world  monde WorldEdit concerné
-     * @param region sélection à analyser
-     * @param limit  plafond au-delà duquel le comptage s'arrête (<= 0 : renvoie 0)
-     * @return le nombre de blocs remplaçables trouvés, borné par {@code limit}
+     * Vrai si le joueur, ou son île, a un /place en cours d'exécution : un second lancé en même temps viserait les
+     * mêmes emplacements vides et ferait payer deux fois les mêmes blocs.
      */
-    public int countPlaceable(World world, Region region, int limit) {
+    public boolean isBusy(Player player, Island island) {
+        return busyPlayers.contains(player.getUniqueId())
+            || (island != null && busyIslands.contains(island.getUniqueId()));
+    }
+
+    /**
+     * Parcourt la région dans l'ordre de WorldEdit et retient les positions où /place peut poser : air, eau ou lave,
+     * sans métadonnée protégée ({@code settings.protected-metadata}). S'arrête dès {@code limit} positions trouvées.
+     * Tourne hors du thread principal.
+     *
+     * @param out reçoit les positions trouvées (null : comptage seul)
+     * @return le nombre de positions trouvées, borné par {@code limit}
+     */
+    private int scan(World world, org.bukkit.World bukkitWorld, Region region, int limit, List<BlockVector3> out) {
         if (limit <= 0) {
             return 0;
         }
-
+        SectionReader reader = new SectionReader(world, replaceableStates);
+        ConfigManager config = plugin.getConfigManager();
         int found = 0;
-        BlockTypeReader reader = new BlockTypeReader(BukkitAdapter.adapt(world));
-        try (EditSession session = WorldEdit.getInstance().newEditSession(world)) {
-            for (BlockVector3 pt : region) {
-                if (isReplaceable(reader, session, pt)) {
-                    found++;
-                    if (found >= limit) {
-                        break;
-                    }
-                }
+        for (BlockVector3 pt : region) {
+            int x = pt.x();
+            int y = pt.y();
+            int z = pt.z();
+            if (!reader.matches(x, y, z) || config.isProtected(bukkitWorld, x, y, z)) {
+                continue;
             }
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.SEVERE, "Erreur lors du comptage des blocs remplaçables", e);
-            return 0;
+            if (out != null) {
+                out.add(BlockVector3.at(x, y, z));
+            }
+            if (++found >= limit) {
+                break;
+            }
         }
         return found;
     }
 
+    /**
+     * Compte, hors du thread principal, les emplacements où /place peut poser, en s'arrêtant à {@code limit} : la
+     * limite du groupe plafonne de toute façon ce que le joueur peut poser. {@code onCount} est appelé sur le thread
+     * principal si le joueur est encore en ligne.
+     */
+    public void countPlaceableAsync(Player player, World world, Region region, int limit, IntConsumer onCount) {
+        Region copy = region.clone();
+        org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
+        async(() -> scan(world, bukkitWorld, copy, limit, null), (count, error) -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            if (error != null) {
+                plugin.getLogger().log(Level.SEVERE, "Erreur lors du comptage des blocs remplaçables", error);
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("count-error")
+                    .replace("%error%", String.valueOf(error.getMessage())));
+                return;
+            }
+            onCount.accept(count);
+        }, false);
+    }
+
+    /**
+     * /place confirmé par le clic sur un bloc de l'inventaire.
+     *
+     * <ol>
+     *   <li>thread principal : vérifications, budget (inventaire et limite du groupe) ;</li>
+     *   <li>hors thread principal : recherche des emplacements libres, arrêt au budget ;</li>
+     *   <li>thread principal : retrait de l'argent et des blocs pour le nombre exact d'emplacements trouvés ;</li>
+     *   <li>hors thread principal : pose par FAWE ;</li>
+     *   <li>thread principal : SuperiorSkyblock2, message, son, journal.</li>
+     * </ol>
+     * Rien n'est payé avant d'avoir trouvé les emplacements, donc aucun remboursement hors erreur de FAWE.
+     */
     public void executePlace(Player player, Region region, ItemStack chosenItem, Island island) {
         // L'item cliqué est l'objet vivant de l'inventaire : on travaille sur une copie autonome
         ItemStack template = chosenItem.clone();
@@ -129,10 +201,10 @@ public class WorldEditManager {
         if (!isActionStillValid(player, region, island)) {
             return;
         }
-
-        Group group = plugin.getConfigManager().getPlayerGroup(player);
-        World world = worldOf(player, region);
-        BlockState blockToPlace = BukkitAdapter.adapt(template.getType().createBlockData());
+        if (isBusy(player, island)) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage("action-in-progress"));
+            return;
+        }
 
         if (plugin.getConfigManager().isBlockBanned("place", template.getType())) {
             Common.sendMessage(player, plugin.getConfigManager().getMessage("banned-block-place")
@@ -149,110 +221,243 @@ public class WorldEditManager {
             return;
         }
 
-        // Le budget se déduit de l'inventaire et de la limite du groupe : aucun
-        // parcours de la région n'est nécessaire pour l'établir. Le nombre réel de
-        // blocs posés est compté pendant la pose, et le surplus est remboursé.
-        int budget = playerBlockCount;
+        Group group = plugin.getConfigManager().getPlayerGroup(player);
         int maxAllowedByPerm = group.getMaxBlocks();
-        boolean cappedByPermission = false;
-        if (maxAllowedByPerm > 0 && budget > maxAllowedByPerm) {
-            budget = maxAllowedByPerm;
-            cappedByPermission = true;
-        }
+        boolean cappedByPermission = maxAllowedByPerm > 0 && playerBlockCount > maxAllowedByPerm;
+        int budget = cappedByPermission ? maxAllowedByPerm : playerBlockCount;
 
-        double reservedCost = budget * group.getPlacePrice();
+        World world = worldOf(player, region);
+        org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
+        PlaceJob job = new PlaceJob(player, region, island, template, group, world, bukkitWorld,
+            BukkitAdapter.adapt(template.getType().createBlockData()), cappedByPermission);
 
-        if (!plugin.getVaultHook().has(player, reservedCost)) {
-            double missing = reservedCost - plugin.getVaultHook().getBalance(player);
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-money")
-                .replace("%missing%", plugin.getVaultHook().format(missing)));
-            return;
-        }
-
-        if (!plugin.getVaultHook().withdraw(player, reservedCost)) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-money-transaction-failed"));
-            return;
-        }
-        int removed = removeItems(player, template, budget);
-        if (removed < budget) {
-            // L'inventaire a changé entre le comptage et le retrait : on ne pose que ce qui a réellement été retiré
-            double unusedReservation = (budget - removed) * group.getPlacePrice();
-            plugin.getVaultHook().depositPlayer(player, unusedReservation);
-            reservedCost -= unusedReservation;
-            budget = removed;
-            if (budget <= 0) {
-                Common.sendMessage(player, plugin.getConfigManager().getMessage("no-blocks")
-                    .replace("%type%", prettyName(template.getType())));
+        busyPlayers.add(job.playerId);
+        busyIslands.add(job.islandId);
+        List<BlockVector3> positions = new ArrayList<>(Math.min(budget, 4096));
+        async(() -> scan(world, bukkitWorld, region, budget, positions), (found, error) -> {
+            if (error != null) {
+                release(job);
+                plugin.getLogger().log(Level.SEVERE, "Erreur pendant la lecture de la sélection de /place pour " + player.getName(), error);
+                if (player.isOnline()) {
+                    Common.sendMessage(player, plugin.getConfigManager().getMessage("count-error")
+                        .replace("%error%", String.valueOf(error.getMessage())));
+                }
                 return;
             }
-        }
+            chargeAndPlace(job, positions);
+        }, false);
+    }
 
-        // Une seule passe sur la région : lecture de l'état, écriture directe dans
-        // l'EditSession (FAWE regroupe les écritures par chunk), arrêt dès que le
-        // budget est épuisé. L'ancienne version faisait trois passes complètes
-        // (countBlocks, remplissage d'un BlockArrayClipboard dimensionné sur toute
-        // la région, puis collage) pour le même résultat.
-        int affected = 0;
-        org.bukkit.World bukkitWorld = BukkitAdapter.adapt(world);
-        BlockTypeReader reader = new BlockTypeReader(bukkitWorld);
-        Set<Long> touchedChunks = new HashSet<>();
+    /**
+     * Thread principal : fait payer les emplacements trouvés puis lance la pose. Libère le joueur et l'île sur
+     * toute sortie anticipée.
+     */
+    private void chargeAndPlace(PlaceJob job, List<BlockVector3> positions) {
+        Player player = job.player;
+        boolean launched = false;
+        try {
+            // Rien n'a encore été payé : un joueur parti ou une île changée entre-temps arrête tout simplement l'action
+            if (!player.isOnline() || !isActionStillValid(player, job.region, job.island)) {
+                return;
+            }
+            if (positions.isEmpty()) {
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("no-placeable-blocks-in-selection"));
+                return;
+            }
+
+            // L'inventaire a pu changer pendant la lecture de la sélection
+            int available = countItems(player, job.template);
+            if (available == 0) {
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("no-blocks")
+                    .replace("%type%", prettyName(job.template.getType())));
+                return;
+            }
+            int amount = Math.min(positions.size(), available);
+            double price = job.group.getPlacePrice();
+            double cost = amount * price;
+
+            if (!plugin.getVaultHook().has(player, cost)) {
+                double missing = cost - plugin.getVaultHook().getBalance(player);
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("no-money")
+                    .replace("%missing%", plugin.getVaultHook().format(missing)));
+                return;
+            }
+            if (!plugin.getVaultHook().withdraw(player, cost)) {
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("no-money-transaction-failed"));
+                return;
+            }
+            int removed = removeItems(player, job.template, amount);
+            if (removed < amount) {
+                plugin.getVaultHook().depositPlayer(player, (amount - removed) * price);
+                amount = removed;
+                cost = amount * price;
+                if (amount <= 0) {
+                    Common.sendMessage(player, plugin.getConfigManager().getMessage("no-blocks")
+                        .replace("%type%", prettyName(job.template.getType())));
+                    return;
+                }
+            }
+
+            List<BlockVector3> toPlace = new ArrayList<>(positions.subList(0, amount));
+            int placed = amount;
+            double charged = cost;
+            launched = true;
+            async(() -> {
+                setBlocks(job.world, toPlace, job.blockToPlace);
+                return null;
+            }, (ignored, error) -> finishPlace(job, toPlace, placed, charged, error), true);
+        } finally {
+            if (!launched) {
+                release(job);
+            }
+        }
+    }
+
+    /**
+     * Hors thread principal : pose les blocs par FAWE, qui regroupe les écritures par chunk.
+     */
+    private static void setBlocks(World world, List<BlockVector3> positions, BlockState block) throws WorldEditException {
         try (EditSession session = WorldEdit.getInstance().newEditSession(world)) {
-            for (BlockVector3 pt : region) {
-                if (affected >= budget) {
-                    break;
-                }
-                if (!isReplaceable(reader, session, pt)) {
-                    continue;
-                }
-                // Un générateur en régénération est vide : il ne doit pas être rempli
-                if (plugin.getConfigManager().isProtected(bukkitWorld, pt.getX(), pt.getY(), pt.getZ())) {
-                    continue;
-                }
-                session.setBlock(pt, blockToPlace);
-                touchedChunks.add(((long) (pt.getX() >> 4) << 32) | ((pt.getZ() >> 4) & 0xFFFFFFFFL));
-                affected++;
+            for (BlockVector3 pt : positions) {
+                session.setBlock(pt, block);
             }
             Operations.complete(session.commit());
-        } catch (WorldEditException e) {
-            refund(player, template, budget, reservedCost);
+        }
+    }
+
+    /**
+     * Thread principal, après la pose : SuperiorSkyblock2, message, son, journal. Sur erreur de FAWE, tout est rendu.
+     */
+    private void finishPlace(PlaceJob job, List<BlockVector3> positions, int placed, double charged, Throwable error) {
+        release(job);
+        Player player = job.player;
+        if (error != null) {
+            refund(player, job.template, placed, charged);
             Common.sendMessage(player, plugin.getConfigManager().getMessage("worldedit-error")
-                .replace("%error%", String.valueOf(e.getMessage())));
-            plugin.getLogger().log(Level.SEVERE, "Erreur WorldEdit pendant /place pour " + player.getName(), e);
-            return;
-        }
-
-        // Rembourse la part réservée mais non consommée.
-        int unused = budget - affected;
-        if (unused > 0) {
-            refund(player, template, unused, unused * group.getPlacePrice());
-        }
-
-        if (affected == 0) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("no-placeable-blocks-in-selection"));
+                .replace("%error%", String.valueOf(error.getMessage())));
+            plugin.getLogger().log(Level.SEVERE, "Erreur WorldEdit pendant /place pour " + player.getName(), error);
             return;
         }
 
         // N'avertir que si la limite du groupe a réellement borné la pose : le joueur
         // avait de quoi aller plus loin et la sélection offrait la place.
-        if (cappedByPermission && affected >= maxAllowedByPerm) {
+        int maxAllowedByPerm = job.group.getMaxBlocks();
+        if (job.cappedByPermission && placed >= maxAllowedByPerm) {
             Common.sendMessage(player, plugin.getConfigManager().getMessage("limit-exceeded")
                 .replace("%max%", String.valueOf(maxAllowedByPerm)));
         }
 
-        Key blockKey = SuperiorSkyblockAPI.getKeys().getKey(template);
+        Key blockKey = SuperiorSkyblockAPI.getKeys().getKey(job.template);
         if (blockKey != null) {
-            island.handleBlockPlace(blockKey, affected, true);
+            job.island.handleBlockPlace(blockKey, placed, true);
         }
-        markChunksDirty(island, bukkitWorld, touchedChunks);
+        Set<Long> touchedChunks = new HashSet<>();
+        for (BlockVector3 pt : positions) {
+            touchedChunks.add(((long) (pt.x() >> 4) << 32) | ((pt.z() >> 4) & 0xFFFFFFFFL));
+        }
+        markChunksDirty(job.island, job.bukkitWorld, touchedChunks);
 
-        double chargedCost = affected * group.getPlacePrice();
         Common.sendMessage(player, plugin.getConfigManager().getMessage("placed-success")
-            .replace("%amount%", String.valueOf(affected))
-            .replace("%type%", prettyName(template.getType()))
-            .replace("%price%", plugin.getVaultHook().format(chargedCost)));
-        player.playSound(player.getLocation(), plugin.getConfigManager().getBuildSound(), 1.0f, 1.0f);
+            .replace("%amount%", String.valueOf(placed))
+            .replace("%type%", prettyName(job.template.getType()))
+            .replace("%price%", plugin.getVaultHook().format(charged)));
+        if (player.isOnline()) {
+            player.playSound(player.getLocation(), plugin.getConfigManager().getBuildSound(), 1.0f, 1.0f);
+        }
 
-        plugin.getLogManager().logPlace(player, affected, template.getType(), chargedCost);
+        plugin.getLogManager().logPlace(player, placed, job.template.getType(), charged);
+    }
+
+    private void release(PlaceJob job) {
+        busyPlayers.remove(job.playerId);
+        busyIslands.remove(job.islandId);
+    }
+
+    /**
+     * Lance {@code work} hors du thread principal puis {@code onMain} sur le thread principal avec son résultat ou
+     * son erreur. {@code critical} : la suite fait suite à un paiement et doit s'exécuter même si le plugin s'arrête
+     * entre-temps ({@link #shutdown}).
+     */
+    private <T> void async(Callable<T> work, BiConsumer<T, Throwable> onMain, boolean critical) {
+        try {
+            worker.execute(() -> {
+                T result = null;
+                Throwable error = null;
+                try {
+                    result = work.call();
+                } catch (Throwable t) {
+                    error = t;
+                }
+                T finalResult = result;
+                Throwable finalError = error;
+                runOnMain(() -> onMain.accept(finalResult, finalError), critical);
+            });
+        } catch (RejectedExecutionException e) {
+            // Plugin en cours d'arrêt : on est déjà sur le thread principal
+            onMain.accept(null, e);
+        }
+    }
+
+    private void runOnMain(Runnable task, boolean critical) {
+        Runnable toRun = task;
+        if (critical) {
+            MainTask once = new MainTask(task);
+            pendingFinishes.add(once);
+            toRun = once;
+        }
+        try {
+            Bukkit.getScheduler().runTask(plugin, toRun);
+        } catch (IllegalPluginAccessException e) {
+            // Plugin désactivé : shutdown() exécute les suites critiques, les autres n'avaient rien fait payer
+        }
+    }
+
+    /** Suite exécutée une seule fois, par le planificateur ou par shutdown(). */
+    private final class MainTask implements Runnable {
+        private final AtomicBoolean done = new AtomicBoolean();
+        private final Runnable task;
+
+        MainTask(Runnable task) {
+            this.task = task;
+        }
+
+        @Override
+        public void run() {
+            if (done.compareAndSet(false, true)) {
+                pendingFinishes.remove(this);
+                task.run();
+            }
+        }
+    }
+
+    /** Données d'un /place entre ses étapes. */
+    private static final class PlaceJob {
+        final Player player;
+        final UUID playerId;
+        final Region region;
+        final Island island;
+        final UUID islandId;
+        final ItemStack template;
+        final Group group;
+        final World world;
+        final org.bukkit.World bukkitWorld;
+        final BlockState blockToPlace;
+        final boolean cappedByPermission;
+
+        PlaceJob(Player player, Region region, Island island, ItemStack template, Group group, World world,
+                 org.bukkit.World bukkitWorld, BlockState blockToPlace, boolean cappedByPermission) {
+            this.player = player;
+            this.playerId = player.getUniqueId();
+            this.region = region;
+            this.island = island;
+            this.islandId = island.getUniqueId();
+            this.template = template;
+            this.group = group;
+            this.world = world;
+            this.bukkitWorld = bukkitWorld;
+            this.blockToPlace = blockToPlace;
+            this.cappedByPermission = cappedByPermission;
+        }
     }
 
     /**
@@ -278,6 +483,11 @@ public class WorldEditManager {
         try {
             // L'état du joueur a pu changer pendant le délai de confirmation (île quittée, droits retirés...)
             if (!isActionStillValid(player, region, island)) {
+                return;
+            }
+            // Un /place en cours sur l'île pose ses blocs en ce moment : on attend qu'il ait fini
+            if (isBusy(player, island)) {
+                Common.sendMessage(player, plugin.getConfigManager().getMessage("action-in-progress"));
                 return;
             }
 
@@ -420,6 +630,13 @@ public class WorldEditManager {
             plugin.getVaultHook().depositPlayer(player, money);
         }
         if (amount <= 0) return;
+
+        if (!player.isOnline()) {
+            // Joueur parti pendant un /place en échec : son inventaire est déjà sauvegardé, les objets seraient perdus
+            plugin.getLogger().warning(player.getName() + " s'est déconnecté avant le remboursement de /place : "
+                + amount + " " + template.getType() + " à lui rendre (l'argent est rendu).");
+            return;
+        }
 
         int maxStackSize = Math.max(1, template.getType().getMaxStackSize());
         int remaining = amount;

@@ -83,6 +83,9 @@ selection-too-large: "&7&l« &c&lSH &8&l» &7Vous avez sélectionné une zone tr
 # L'action en attente est annulée (commande d'annulation ou expiration).
 action-cancelled: "&7&l« &c&lSH &8&l» &7Action annulée."
 
+# Un /place du joueur ou de son île pose encore ses blocs (moins d'une seconde en général).
+action-in-progress: "&7&l« &6&lSH &8&l» &7Un &6/place &7est en cours sur votre île, réessayez dans un instant."
+
 # Annulation demandée sans action en attente.
 no-action: "&7&l« &c&lSH &8&l» &cVous n'avez aucune action en cours."
 
@@ -92,7 +95,7 @@ inventory-full: "&7&l« &c&lSH &8&l» &cVotre inventaire est plein ! Les blocs r
 # La limite du groupe a borné la pose. Placeholders : %max% limite du groupe.
 limit-exceeded: "&7&l« &e&lSH &8&l» &eVotre sélection dépasse votre limite, l'opération a été limitée à &6%max% blocs&e."
 
-# Erreur de WorldEdit pendant le comptage des blocs de /cut. Placeholders : %error% détail de l'erreur.
+# Erreur de WorldEdit pendant le comptage des blocs de /cut ou la lecture de la sélection de /place (rien n'est payé). Placeholders : %error% détail de l'erreur.
 count-error: "&7&l« &c&lSH &8&l» &7Erreur lors du comptage des blocs : &c%error%&7."
 
 # Erreur de WorldEdit pendant /place : les objets et l'argent sont rendus. Placeholders : %error% détail de l'erreur.

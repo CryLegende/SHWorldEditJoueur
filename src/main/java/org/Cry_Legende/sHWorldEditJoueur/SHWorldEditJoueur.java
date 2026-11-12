@@ -85,6 +85,9 @@ public final class SHWorldEditJoueur extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (worldEditManager != null) {
+            worldEditManager.shutdown();
+        }
         getLogger().info("SHWorldEditJoueur a été désactivé.");
     }
 

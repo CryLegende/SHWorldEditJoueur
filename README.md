@@ -31,6 +31,16 @@ Utilisé sur : **Opale**.
 | `/shworldeditjoueur reload` | `/shwe` | Recharge `config.yml` et `messages.yml` (console comprise). Un fichier YAML invalide laisse l'ancienne configuration en place et affiche le fichier et la ligne de l'erreur. Les actions en attente ne changent pas. | `shworldeditjoueur.admin.reload` |
 | `/shworldeditjoueur info [joueur]` | `/shwe` | Palier appliqué à un joueur : groupe, limite de blocs, prix, action en attente. | `shworldeditjoueur.admin.info` |
 
+## Fonctionnement
+
+- La sélection est lue hors du thread principal, au comptage de la commande comme à la confirmation : une grande sélection ne fait pas ramer le serveur.
+- La modification se fait ensuite en un seul tick : chaque bloc est relu, l'argent et les objets sont pris, les blocs sont posés ou retirés, puis relus. Le joueur paie et reçoit exactement ce qui a changé. Un bloc cassé ou posé entre la lecture et la confirmation est laissé de côté.
+- Un seul `/place` ou `/cut` à la fois par joueur et par île.
+- `/place` ne pose que des blocs ordinaires (pas d'objet nommé, enchanté, rempli ou propre à un plugin) et refuse les blocs de deux de haut (porte, lit, grande fleur).
+- `/cut` ne coupe jamais l'air, les blocs incassables en survie, les blocs de `banned-blocks.cut` ni ceux qui portent une métadonnée de `protected-metadata`. Il laisse en place les blocs qui gardent quelque chose : conteneur non vide, pupitre avec livre, juke-box avec disque, ruche habitée, bannière à motifs, feu de camp garni.
+- Objets rendus par `/cut` : `replace-give`, sinon l'objet du bloc. Une porte ou une grande fleur rend un objet pour ses deux moitiés, une dalle double deux dalles, des bougies, cornichons de mer, œufs de tortue, pétales ou couches de neige leur nombre, un pot garni le pot et la plante.
+- Le compte des blocs de l'île (SuperiorSkyblock2) suit son propre calcul : les deux moitiés d'une porte comptent, une dalle double compte pour deux.
+
 ## Permissions
 
 | Permission | Description | Par défaut |

@@ -53,9 +53,12 @@ public class InventoryListener implements Listener {
 
         ItemStack clickedItem = event.getCurrentItem();
 
-        // 5. Vérifier que le joueur a cliqué sur un item qui est un bloc placable.
-        if (!clickedItem.getType().isBlock()) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("invalid-block"));
+        // 5. Vérifier que l'objet cliqué peut être posé (bloc ordinaire, autorisé, d'un seul bloc de haut).
+        // Refusé : l'action reste en attente, le joueur peut cliquer un autre objet.
+        String refusal = plugin.getWorldEditManager().placeRefusal(clickedItem);
+        if (refusal != null) {
+            Common.sendMessage(player, plugin.getConfigManager().getMessage(refusal)
+                .replace("%type%", clickedItem.getType().toString().toLowerCase(java.util.Locale.ROOT).replace("_", " ")));
             return;
         }
 

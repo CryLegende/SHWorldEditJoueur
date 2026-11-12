@@ -1,7 +1,6 @@
 package org.Cry_Legende.sHWorldEditJoueur.commands;
 
 import com.bgsoftware.superiorskyblock.api.island.Island;
-import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.regions.Region;
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
 import org.Cry_Legende.sHWorldEditJoueur.config.Group;
@@ -84,35 +83,8 @@ public class PlaceCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Un /place précédent pose encore ses blocs sur l'île
-        if (plugin.getWorldEditManager().isBusy(player, island)) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("action-in-progress"));
-            return true;
-        }
-
-        // 4. Compter les blocs plaçables pour le message de confirmation, hors du thread principal.
-        // Le comptage s'arrête à la limite du groupe : au-delà, le nombre exact
-        // n'a aucun effet puisque WorldEditManager plafonne de toute façon la pose.
-        int cap = group.getMaxBlocks() > 0 ? group.getMaxBlocks() : Integer.MAX_VALUE;
-        Region counted = selection.clone();
-        plugin.getWorldEditManager().countPlaceableAsync(player, BukkitAdapter.adapt(player.getWorld()), counted, cap,
-            placeableCount -> {
-                if (placeableCount == 0) {
-                    Common.sendMessage(player, plugin.getConfigManager().getMessage("no-placeable-blocks-in-selection"));
-                    return;
-                }
-
-                // 5. Lancer l'action de placement et mettre le joueur en attente
-                plugin.getActionManager().startAction(player, counted, ActionData.ActionType.PLACE, island);
-
-                // 6. Envoyer le message de confirmation avec le bon nombre de blocs
-                String confirmMessage = plugin.getConfigManager().getMessage("confirm-place")
-                    .replace("%amount%", String.valueOf(placeableCount))
-                    .replace("%price%", plugin.getVaultHook().format(group.getPlacePrice()))
-                    .replace("%time%", String.valueOf(plugin.getConfigManager().getCancelTime()));
-
-                player.sendMessage(confirmMessage.split("\n"));
-            });
+        // 4. Comptage hors du thread principal, puis message de confirmation et action en attente
+        plugin.getWorldEditManager().requestPlace(player, island, selection, group);
 
         return true;
     }

@@ -1,15 +1,7 @@
 package org.Cry_Legende.sHWorldEditJoueur.commands;
 
 import com.bgsoftware.superiorskyblock.api.island.Island;
-import com.sk89q.worldedit.EditSession;
-import com.sk89q.worldedit.WorldEdit;
-import com.sk89q.worldedit.WorldEditException;
-import com.sk89q.worldedit.bukkit.BukkitAdapter;
-import com.sk89q.worldedit.function.mask.Mask;
-import com.sk89q.worldedit.function.mask.Masks;
-import com.sk89q.worldedit.function.mask.BlockTypeMask;
 import com.sk89q.worldedit.regions.Region;
-import com.sk89q.worldedit.world.block.BlockTypes;
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
 import org.Cry_Legende.sHWorldEditJoueur.config.Group;
 import org.Cry_Legende.sHWorldEditJoueur.managers.ActionData;
@@ -83,8 +75,7 @@ public class CutCommand implements CommandExecutor, TabCompleter {
 
         Group group = plugin.getConfigManager().getPlayerGroup(player);
 
-        // Contrôles d'île avant le comptage : le parcours de la sélection se fait sur le thread principal,
-        // il doit rester borné à la taille d'une île.
+        // Contrôles d'île avant le comptage : le parcours de la sélection reste borné à la taille d'une île.
         Island island = plugin.getSsbHook().getIsland(player);
         if (island == null) {
             Common.sendMessage(player, plugin.getConfigManager().getMessage("no-island"));
@@ -101,35 +92,9 @@ public class CutCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // CORRECTION : On compte les blocs réels (non-air) avant de vérifier la limite.
-        int nonAirBlocks;
-        try (EditSession countSession = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(player.getWorld()))) {
-            // On crée un masque qui ne comptera QUE les blocs qui ne sont PAS de l'air.
-            Mask mask = Masks.negate(new BlockTypeMask(countSession, BlockTypes.AIR, BlockTypes.CAVE_AIR, BlockTypes.VOID_AIR));
-            nonAirBlocks = countSession.countBlocks(selection, mask);
-        } catch (WorldEditException e) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("count-error")
-                .replace("%error%", String.valueOf(e.getMessage())));
-            return true;
-        }
-
-        if (nonAirBlocks > group.getMaxBlocks()) {
-            Common.sendMessage(player, plugin.getConfigManager().getMessage("selection-too-large")
-                .replace("%max%", String.valueOf(group.getMaxBlocks()))
-                .replace("%size%", String.valueOf(nonAirBlocks))); // On utilise le nombre de blocs réels
-            return true;
-        }
-
-        plugin.getActionManager().startAction(player, selection, ActionData.ActionType.CUT, island);
-
-        double estimatedCost = nonAirBlocks * group.getCutPrice(); // Le coût est basé sur les blocs réels
-        String confirmMessage = plugin.getConfigManager().getMessage("confirm-cut")
-            .replace("%amount%", String.valueOf(nonAirBlocks)) // On affiche le nombre de blocs réels
-            .replace("%price%", plugin.getVaultHook().format(group.getCutPrice()))
-            .replace("%total_price%", plugin.getVaultHook().format(estimatedCost))
-            .replace("%time%", String.valueOf(plugin.getConfigManager().getCancelTime()));
-
-        player.sendMessage(confirmMessage.split("\n"));
+        // Comptage hors du thread principal (arrêt dès que la limite du groupe est dépassée), puis message de
+        // confirmation et action en attente
+        plugin.getWorldEditManager().requestCut(player, island, selection, group);
 
         return true;
     }

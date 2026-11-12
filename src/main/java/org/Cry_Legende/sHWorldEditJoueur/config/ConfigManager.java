@@ -95,16 +95,8 @@ public class ConfigManager {
         confirmWord = settings.getString("confirm-word", "confirm");
         cancelTime = settings.getInt("cancel-time", 20);
 
-        Set<Material> newBannedPlace = settings.getStringList("banned-blocks.place").stream()
-            .map(s -> Material.matchMaterial(s.trim().toUpperCase()))
-            .filter(Objects::nonNull)
-            .collect(Collectors.toCollection(() -> EnumSet.noneOf(Material.class)));
-        Set<Material> newBannedCut = settings.getStringList("banned-blocks.cut").stream()
-            .map(s -> Material.matchMaterial(s.trim().toUpperCase()))
-            .filter(Objects::nonNull)
-            .collect(Collectors.toCollection(() -> EnumSet.noneOf(Material.class)));
-        bannedPlace = newBannedPlace;
-        bannedCut = newBannedCut;
+        bannedPlace = materials(settings.getStringList("banned-blocks.place"), "banned-blocks.place");
+        bannedCut = materials(settings.getStringList("banned-blocks.cut"), "banned-blocks.cut");
         protectedMetadata = settings.getStringList("protected-metadata").stream()
             .map(String::trim)
             .filter(s -> !s.isEmpty())
@@ -135,6 +127,26 @@ public class ConfigManager {
             }
         }
         replaceGiveMap = newReplaceGive;
+    }
+
+    /**
+     * Liste de matériaux de la config. Un nom inconnu est signalé (il ne bloquait rien sans le dire).
+     */
+    private Set<Material> materials(List<String> names, String path) {
+        Set<Material> result = EnumSet.noneOf(Material.class);
+        List<String> unknown = new ArrayList<>();
+        for (String name : names) {
+            Material material = Material.matchMaterial(name.trim().toUpperCase(Locale.ROOT));
+            if (material == null) {
+                unknown.add(name.trim());
+            } else {
+                result.add(material);
+            }
+        }
+        if (!unknown.isEmpty()) {
+            plugin.getLogger().warning(path + " : nom(s) inconnu(s), sans effet : " + String.join(", ", unknown));
+        }
+        return result;
     }
 
     /**
@@ -283,8 +295,16 @@ public class ConfigManager {
     }
 
     /**
+     * Blocs que /cut ne coupe jamais (ensemble remplacé d'un bloc au rechargement : lisible hors du thread principal).
+     */
+    public Set<Material> getBannedCut() {
+        return bannedCut;
+    }
+
+    /**
      * Vrai si le bloc porte une des métadonnées de {@code settings.protected-metadata} :
-     * ni /cut ni /place n'y touchent.
+     * ni /cut ni /place n'y touchent. Appelable hors du thread principal : le magasin de métadonnées des blocs est
+     * une ConcurrentHashMap et getBlockAt ne charge rien.
      */
     public boolean isProtected(World world, int x, int y, int z) {
         if (protectedMetadata.isEmpty()) return false;

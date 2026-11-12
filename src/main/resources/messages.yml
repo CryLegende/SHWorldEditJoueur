@@ -62,8 +62,12 @@ no-money: "&7&l« &c&lSH &8&l» &7Vous n'avez pas assez d'argent pour faire cela
 # Le joueur n'a pas le bloc choisi dans son inventaire. Placeholders : %type% type de bloc.
 no-blocks: "&7&l« &c&lSH &8&l» &7Vous n'avez aucun bloc du type &c%type% &7dans votre inventaire."
 
-# L'objet cliqué pendant /place n'est pas un bloc.
+# L'objet cliqué pendant /place n'est pas un bloc, ou demande deux blocs de haut (porte, lit, grande fleur).
 invalid-block: "&7&l« &c&lSH &8&l» &cCet objet ne peut pas être placé."
+
+# L'objet cliqué pendant /place est nommé, enchanté, rempli (boîte de shulker) ou propre à un plugin (générateur...) :
+# /place le remplacerait par un bloc ordinaire.
+plain-blocks-only: "&7&l« &c&lSH &8&l» &7Seuls les &cblocs ordinaires &7peuvent être posés avec /place (pas d'objet nommé, enchanté ou rempli)."
 
 # Le bloc est interdit à la pose. Placeholders : %type% type de bloc.
 banned-block-place: "&7&l« &c&lSH &8&l» &7Le bloc &c%type% &7ne peut pas être placé."
@@ -73,6 +77,13 @@ banned-block-cut: "&7&l« &c&lSH &8&l» &7Le bloc &c%type% &cne peut pas être c
 
 # La sélection n'a aucun emplacement libre (air, eau...).
 no-placeable-blocks-in-selection: "&7&l« &c&lSH &8&l» &7Votre sélection ne contient aucun bloc où placer des blocs (air, eau, etc.)."
+
+# Fin de /cut : des blocs qui gardent quelque chose (conteneur non vide, pupitre avec livre, disque, ruche habitée,
+# bannière à motifs, feu de camp garni) sont restés en place. Placeholders : %amount% blocs laissés.
+cut-kept-containers: "&7&l« &e&lSH &8&l» &e%amount% bloc(s) &7non vide(s) (coffre, four, ruche...) sont restés en place : videz-les d'abord."
+
+# /cut confirm : la sélection ne contient que des blocs non vides (voir cut-kept-containers).
+cut-kept-containers-only: "&7&l« &c&lSH &8&l» &7Votre sélection ne contient que des blocs &cnon vides &7(coffre, four, ruche...) : videz-les d'abord."
 
 # La sélection n'a aucun bloc à couper.
 no-cuttable-blocks-in-selection: "&7&l« &c&lSH &8&l» &7Votre sélection ne contient aucun bloc à couper."

@@ -59,7 +59,7 @@ Le privilège d'île SuperiorSkyblock2 `SHWORLDEDIT_USE` (réglé par île dans 
 
 ## Configuration
 
-Fichiers par défaut repris du serveur (secrets remplacés par `CHANGE_ME`). Cliquez sur un fichier pour l'ouvrir :
+Fichiers par défaut, avec des valeurs d'exemple. Cliquez sur un fichier pour l'ouvrir :
 
 <pre>
 plugins/SHWorldEditJoueur/

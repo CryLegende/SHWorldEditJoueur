@@ -41,6 +41,10 @@ Utilisé sur : **Opale**.
 - Objets rendus par `/cut` : `replace-give`, sinon l'objet du bloc. Une porte ou une grande fleur rend un objet pour ses deux moitiés, une dalle double deux dalles, des bougies, cornichons de mer, œufs de tortue, pétales ou couches de neige leur nombre, un pot garni le pot et la plante.
 - Le compte des blocs de l'île (SuperiorSkyblock2) suit son propre calcul : les deux moitiés d'une porte comptent, une dalle double compte pour deux.
 
+## API
+
+`org.Cry_Legende.sHWorldEditJoueur.api.PlayerCutBlocksEvent` : appelé sur le thread principal quand `/cut` vient de retirer des blocs, juste avant de rendre les objets. Il donne le joueur, le monde et chaque bloc coupé (position, matériau). Un plugin qui garde des données sur un bloc ailleurs que dans le bloc (par exemple dans le chunk) peut remplacer les objets rendus pour ce bloc avec `setDrops(index, objets)`. Les blocs sont déjà retirés et payés : l'événement ne s'annule pas. Sans écouteur, il n'est pas construit.
+
 ## Permissions
 
 | Permission | Description | Par défaut |

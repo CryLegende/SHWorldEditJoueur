@@ -13,6 +13,7 @@ import com.sk89q.worldedit.world.World;
 import com.sk89q.worldedit.world.block.BlockState;
 import com.sk89q.worldedit.world.block.BlockTypes;
 import org.Cry_Legende.sHWorldEditJoueur.SHWorldEditJoueur;
+import org.Cry_Legende.sHWorldEditJoueur.api.PlayerCutBlocksEvent;
 import org.Cry_Legende.sHWorldEditJoueur.config.ConfigManager;
 import org.Cry_Legende.sHWorldEditJoueur.config.Group;
 import org.Cry_Legende.sHWorldEditJoueur.utils.BlockStates;
@@ -533,13 +534,26 @@ public class WorldEditManager {
                     return;
                 }
 
+                // Un plugin qui garde des données sur un bloc coupé peut remplacer les objets rendus pour lui
+                PlayerCutBlocksEvent cutEvent = PlayerCutBlocksEvent.hasListeners() ? cutEvent(job, cut) : null;
+                Map<ItemStack, Integer> drops = new LinkedHashMap<>();
+
                 // Objets rendus et blocs retirés du compte de l'île, par matériau. cut.state garde l'état d'avant la coupe.
                 Map<Material, Integer> items = new EnumMap<>(Material.class);
                 Map<Material, Integer> islandBlocks = new EnumMap<>(Material.class);
                 for (int i = 0; i < cut.size; i++) {
                     char state = cut.state[i];
                     Material material = states.material[state];
-                    items.merge(material, (int) states.cutItems[state], Integer::sum);
+                    List<ItemStack> replaced = cutEvent == null ? null : cutEvent.getDrops(i);
+                    if (replaced == null) {
+                        items.merge(material, (int) states.cutItems[state], Integer::sum);
+                    } else {
+                        for (ItemStack drop : replaced) {
+                            ItemStack key = drop.clone();
+                            key.setAmount(1);
+                            drops.merge(key, drop.getAmount(), Integer::sum);
+                        }
+                    }
                     islandBlocks.merge(material, (int) states.islandAmount[state], Integer::sum);
                 }
                 for (Map.Entry<Material, Integer> entry : islandBlocks.entrySet()) {
@@ -551,7 +565,6 @@ public class WorldEditManager {
                         plugin.getLogger().log(Level.SEVERE, "handleBlockBreak a échoué pour la clé " + blockKey, e);
                     }
                 }
-                Map<ItemStack, Integer> drops = new LinkedHashMap<>();
                 for (Map.Entry<Material, Integer> entry : items.entrySet()) {
                     if (entry.getValue() <= 0) continue;
                     for (ItemStack drop : dropsOf(entry.getKey())) {
@@ -572,8 +585,10 @@ public class WorldEditManager {
                 }
                 player.playSound(player.getLocation(), plugin.getConfigManager().getCutSound(), 1.0f, 1.0f);
 
-                String itemsLog = drops.entrySet().stream()
-                    .map(entry -> entry.getValue() + " " + entry.getKey().getType())
+                Map<Material, Integer> logged = new EnumMap<>(Material.class);
+                drops.forEach((item, amount) -> logged.merge(item.getType(), amount, Integer::sum));
+                String itemsLog = logged.entrySet().stream()
+                    .map(entry -> entry.getValue() + " " + entry.getKey())
                     .collect(Collectors.joining(", "));
                 plugin.getLogManager().logCut(player, cut.size, charged, itemsLog);
             } catch (RuntimeException e) {
@@ -582,6 +597,17 @@ public class WorldEditManager {
         } finally {
             unlock(job);
         }
+    }
+
+    /** Thread principal : annonce les blocs coupés ({@link PlayerCutBlocksEvent}). */
+    private PlayerCutBlocksEvent cutEvent(Job job, Positions cut) {
+        List<PlayerCutBlocksEvent.CutBlock> blocks = new ArrayList<>(cut.size);
+        for (int i = 0; i < cut.size; i++) {
+            blocks.add(new PlayerCutBlocksEvent.CutBlock(cut.x[i], cut.y[i], cut.z[i], states.material[cut.state[i]]));
+        }
+        PlayerCutBlocksEvent event = new PlayerCutBlocksEvent(job.player, job.bukkitWorld, blocks);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
     }
 
     /**
